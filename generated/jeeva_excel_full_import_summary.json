@@ -1,0 +1,56 @@
+{
+  "sourceWorkbook": "D:\\My_Work\\Freelance\\Jeeva Construction\\jeeva-electron\\tarun.xlsx",
+  "sqlOutputPath": "D:\\My_Work\\Freelance\\Jeeva Construction\\jeeva-electron\\generated\\jeeva_excel_full_import.sql",
+  "sheetsInWorkbook": 191,
+  "weeklySheetsImported": 183,
+  "skippedSheets": [
+    {
+      "sheetName": "27.08.2022",
+      "reason": "No labour header row"
+    },
+    {
+      "sheetName": "10.09.2022",
+      "reason": "No labour header row"
+    },
+    {
+      "sheetName": "17.09.2022",
+      "reason": "No labour header row"
+    },
+    {
+      "sheetName": "23.11.2024 (2)",
+      "reason": "No labour header row"
+    }
+  ],
+  "sites": 71,
+  "payees": 668,
+  "labours": 463,
+  "materials": 15,
+  "weeklyPaySheetItems": 3691,
+  "purchaseRows": 894,
+  "clientCollectionRows": 261,
+  "totalWeeklyPayableAmount": 75559425,
+  "totalPurchaseAmount": 24568972,
+  "totalClientCollectionAmount": 39671025,
+  "payeeTypeCounts": {
+    "Supplier": 205,
+    "Labour": 423,
+    "Contractor": 40
+  },
+  "materialNames": [
+    "Aggregate / Metal",
+    "Aluminium",
+    "Bricks / Blocks",
+    "Cement",
+    "Concrete / Readymix",
+    "Door / Hardware",
+    "Electrical Material",
+    "Glass",
+    "M Sand",
+    "Paint",
+    "PVC / Plumbing",
+    "Sheet Material",
+    "Steel",
+    "Tiles",
+    "Wood / Plywood"
+  ]
+}

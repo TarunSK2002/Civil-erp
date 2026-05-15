@@ -1,0 +1,834 @@
+/* ========================================
+   Weekly Pay Sheet — Excel-Like Grid
+   ======================================== */
+
+.wps-container {
+  padding: 24px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- Header ---- */
+.wps-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+.wps-header h1 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.wps-header p {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.wps-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ---- Summary Cards ---- */
+.wps-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.wps-summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.wps-summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.wps-summary-card.total::before { background: linear-gradient(90deg, #FFB300, #FF8F00); }
+.wps-summary-card.paid::before { background: linear-gradient(90deg, #4CAF50, #2E7D32); }
+.wps-summary-card.pending::before { background: linear-gradient(90deg, #FF9800, #F57C00); }
+.wps-summary-card.sites::before { background: linear-gradient(90deg, #2196F3, #1565C0); }
+
+.wps-summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.wps-summary-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ---- Sheet Selector Bar ---- */
+.wps-sheet-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.wps-sheet-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  min-width: 220px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.wps-sheet-select:focus {
+  border-color: var(--accent);
+}
+
+/* ---- Filter Chips ---- */
+.wps-filters {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wps-filter-chip {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wps-filter-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wps-filter-chip.active {
+  background: rgba(255, 179, 0, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- Grid Container ---- */
+.wps-grid-wrapper {
+  flex: 1;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  position: relative;
+}
+
+.wps-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* ---- Sticky Headers & First Column ---- */
+.wps-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border);
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-align: center;
+  min-width: 90px;
+}
+
+.wps-grid thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 30;
+  text-align: left;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border-right: 2px solid var(--border);
+}
+
+.wps-grid thead th:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 25;
+  background: var(--bg-secondary);
+  border-left: 2px solid var(--border);
+  min-width: 120px;
+  color: var(--accent);
+}
+
+/* ---- Body Rows ---- */
+.wps-grid tbody tr {
+  transition: background-color 0.15s;
+}
+
+.wps-grid tbody tr:hover {
+  background-color: rgba(255, 179, 0, 0.03);
+}
+
+.wps-grid tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.wps-grid tbody tr:hover td {
+  background-color: transparent;
+}
+
+.wps-grid tbody tr:hover td:first-child {
+  background-color: color-mix(in srgb, var(--bg-card) 97%, #FFB300 3%);
+}
+
+.wps-grid tbody tr:hover td:last-child {
+  background-color: color-mix(in srgb, var(--bg-card) 97%, #FFB300 3%);
+}
+
+/* ---- Cells ---- */
+.wps-grid tbody td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  text-align: center;
+  height: 36px;
+  transition: background-color 0.15s;
+}
+
+.wps-grid tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: var(--bg-card);
+  border-right: 2px solid var(--border);
+  text-align: left;
+  padding: 0 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.wps-grid tbody tr:nth-child(even) td:first-child {
+  background: color-mix(in srgb, var(--bg-card) 97%, white 3%);
+}
+
+.wps-grid tbody td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 10;
+  background: var(--bg-card);
+  border-left: 2px solid var(--border);
+  font-weight: 800;
+  color: var(--accent);
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.wps-grid tbody tr:nth-child(even) td:last-child {
+  background: color-mix(in srgb, var(--bg-card) 97%, white 3%);
+}
+
+/* ---- Cell Content ---- */
+.wps-cell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  position: relative;
+  gap: 4px;
+}
+
+.wps-cell:hover {
+  background: rgba(255, 179, 0, 0.06);
+}
+
+.wps-cell.has-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.wps-cell.empty {
+  color: var(--text-muted);
+  opacity: 0.3;
+}
+
+.wps-cell.paid {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.wps-cell.paid::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4CAF50;
+  flex-shrink: 0;
+}
+
+.wps-cell.pending {
+  color: #FF9800;
+  font-weight: 500;
+}
+
+/* ---- Cell Edit Mode ---- */
+.wps-cell-input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: rgba(255, 179, 0, 0.1);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding: 4px;
+  font-family: inherit;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 2px;
+}
+
+.wps-cell-input::-webkit-inner-spin-button,
+.wps-cell-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
+/* ---- Total Row ---- */
+.wps-grid tbody tr.wps-total-row {
+  background: rgba(255, 179, 0, 0.08) !important;
+}
+
+.wps-grid tbody tr.wps-total-row td {
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+  font-weight: 800;
+  color: var(--accent);
+  font-size: 11px;
+  padding: 8px 10px;
+  position: relative;
+}
+
+.wps-grid tbody tr.wps-total-row td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  background-color: #212134 !important; /* Force fully opaque */
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  border-right: 2px solid var(--border);
+}
+
+.wps-grid tbody tr.wps-total-row td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 25;
+  background-color: #212134 !important; /* Force fully opaque */
+  border-left: 2px solid var(--border);
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* ---- Income Row ---- */
+.wps-grid tbody tr.wps-income-row {
+  background: rgba(76, 175, 80, 0.05) !important;
+}
+
+.wps-grid tbody tr.wps-income-row td {
+  border-top: 1px solid rgba(76, 175, 80, 0.2);
+  font-weight: 700;
+  color: #4CAF50;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.wps-grid tbody tr.wps-income-row td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  background-color: #1a241e !important; /* Force fully opaque green-ish */
+  border-right: 2px solid rgba(76, 175, 80, 0.2);
+}
+
+.wps-grid tbody tr.wps-income-row td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 25;
+  background-color: #1a241e !important; /* Force fully opaque green-ish */
+  color: #4CAF50;
+  font-weight: 800;
+  border-left: 2px solid rgba(76, 175, 80, 0.2);
+}
+
+/* ---- Balance Row ---- */
+.wps-grid tbody tr.wps-balance-row {
+  background: rgba(33, 150, 243, 0.05) !important;
+}
+
+.wps-grid tbody tr.wps-balance-row td {
+  border-top: 1px solid rgba(33, 150, 243, 0.2);
+  font-weight: 700;
+  color: #2196F3;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.wps-grid tbody tr.wps-balance-row td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  background-color: #19202b !important; /* Force fully opaque blue-ish */
+  border-right: 2px solid rgba(33, 150, 243, 0.2);
+}
+
+.wps-grid tbody tr.wps-balance-row td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 25;
+  background-color: #19202b !important; /* Force fully opaque blue-ish */
+  color: #2196F3;
+  font-weight: 800;
+  border-left: 2px solid rgba(33, 150, 243, 0.2);
+}
+
+/* ---- Grand Total Row ---- */
+.wps-grid tbody tr.wps-grand-total-row {
+  background: var(--accent) !important;
+}
+
+.wps-grid tbody tr.wps-grand-total-row td {
+  border-top: 2px solid #0F0F1A;
+  font-weight: 900;
+  color: #0F0F1A !important;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.wps-grid tbody tr.wps-grand-total-row td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 26; /* Slightly higher to stay above others */
+  background: var(--accent) !important;
+  letter-spacing: 0.5px;
+}
+
+.wps-grid tbody tr.wps-grand-total-row td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 26;
+  background-color: var(--accent) !important;
+  font-size: 15px;
+  color: #0F0F1A !important;
+  border-left: 2px solid #0F0F1A;
+}
+
+.wps-total-value {
+  font-weight: 800;
+}
+
+
+/* ---- Payee Name Cell ---- */
+.wps-payee-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wps-payee-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.wps-payee-badge.Labour { background: rgba(156, 39, 176, 0.15); color: #CE93D8; }
+.wps-payee-badge.Contractor { background: rgba(33, 150, 243, 0.15); color: #64B5F6; }
+.wps-payee-badge.Supplier { background: rgba(0, 150, 136, 0.15); color: #4DB6AC; }
+.wps-payee-badge.Material { background: rgba(255, 152, 0, 0.15); color: #FFB74D; }
+.wps-payee-badge.Advance { background: rgba(244, 67, 54, 0.15); color: #EF5350; }
+.wps-payee-badge.Other { background: rgba(158, 158, 158, 0.15); color: #BDBDBD; }
+
+.wps-payee-label {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.wps-payee-type {
+  font-size: 8px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+/* ---- Buttons ---- */
+.wps-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wps-btn-primary {
+  background: var(--accent);
+  color: #0F0F1A;
+}
+
+.wps-btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 179, 0, 0.3);
+}
+
+.wps-btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.wps-btn-secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wps-btn-success {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4CAF50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.wps-btn-success:hover {
+  background: rgba(76, 175, 80, 0.25);
+}
+
+.wps-btn-danger {
+  background: rgba(244, 67, 54, 0.1);
+  color: #F44336;
+  border: 1px solid rgba(244, 67, 54, 0.2);
+}
+
+.wps-btn-danger:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
+
+.wps-btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* ---- Modal Overlay ---- */
+.wps-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.wps-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: fadeIn 0.2s ease;
+}
+
+.wps-modal h2 {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+.wps-modal-field {
+  margin-bottom: 16px;
+}
+
+.wps-modal-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.wps-modal-field input,
+.wps-modal-field select,
+.wps-modal-field textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.wps-modal-field input:focus,
+.wps-modal-field select:focus,
+.wps-modal-field textarea:focus {
+  border-color: var(--accent);
+}
+
+.wps-modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.wps-modal-actions .wps-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 12px;
+}
+
+/* ---- Empty State ---- */
+.wps-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  text-align: center;
+  flex: 1;
+}
+
+.wps-empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 179, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  color: var(--accent);
+}
+
+.wps-empty h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.wps-empty p {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 24px;
+  max-width: 400px;
+}
+
+/* ---- Cell Status Icon ---- */
+.wps-status-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.wps-status-btn:hover {
+  border-color: var(--accent);
+  background: rgba(255, 179, 0, 0.1);
+}
+
+.wps-status-btn.paid {
+  border-color: #4CAF50;
+  background: #4CAF50;
+  color: white;
+}
+
+/* ---- Payee Multi-Select Dropdown ---- */
+.wps-multi-select {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+
+.wps-multi-select-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.wps-multi-select-item:hover {
+  background: rgba(255, 179, 0, 0.06);
+}
+
+.wps-multi-select-item:last-child {
+  border-bottom: none;
+}
+
+.wps-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.wps-checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- Site Header Cell ---- */
+.wps-site-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.wps-site-name {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.wps-site-value {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ---- Loading State ---- */
+.wps-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  flex: 1;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.wps-spinner {
+  animation: spin 1s linear infinite;
+  color: var(--accent);
+}
+
+/* ---- Context Menu on Cell ---- */
+.wps-cell-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.wps-cell-menu button {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wps-cell-menu button:hover {
+  background: rgba(255,179,0,0.1);
+  color: var(--accent);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 900px) {
+  .wps-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

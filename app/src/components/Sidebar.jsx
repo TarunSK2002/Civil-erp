@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import logo from '../assets/logo.jpeg';
 import { 
   LayoutDashboard, 
   Users, 
@@ -101,7 +102,7 @@ const Sidebar = ({ expanded }) => {
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
           overflow: 'hidden'
         }}>
-          <img src="/logo.jpeg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         {expanded && (
           <div className="fade-in">

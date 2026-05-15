@@ -5,7 +5,8 @@ const Material = sequelize.define('Material', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     Name: {
         type: DataTypes.STRING(100),

@@ -5,7 +5,8 @@ const SiteMaterial = sequelize.define('SiteMaterial', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     SiteId: {
         type: DataTypes.INTEGER,

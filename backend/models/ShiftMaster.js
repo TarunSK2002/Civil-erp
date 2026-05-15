@@ -5,7 +5,8 @@ const ShiftMaster = sequelize.define('ShiftMaster', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     ShiftType: {
         type: DataTypes.STRING(30),

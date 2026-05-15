@@ -5,7 +5,8 @@ const Payment = sequelize.define('Payment', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     PaymentCategory: {
         type: DataTypes.STRING(20),

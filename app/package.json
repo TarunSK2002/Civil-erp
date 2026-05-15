@@ -28,7 +28,8 @@
         "from": "../backend",
         "to": "backend",
         "filter": [
-          "**/*"
+          "**/*",
+          ".env"
         ]
       },
       {

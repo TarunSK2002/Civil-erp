@@ -5,7 +5,8 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     AttendanceSheetId: {
         type: DataTypes.INTEGER,

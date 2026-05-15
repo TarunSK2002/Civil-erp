@@ -5,7 +5,8 @@ const Site = sequelize.define('Site', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     SiteName: {
         type: DataTypes.STRING(150),

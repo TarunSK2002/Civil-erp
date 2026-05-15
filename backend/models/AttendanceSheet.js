@@ -5,7 +5,8 @@ const AttendanceSheet = sequelize.define('AttendanceSheet', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     Title: {
         type: DataTypes.STRING(100),

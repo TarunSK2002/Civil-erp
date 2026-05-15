@@ -1,6 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+
+// Default fallbacks for packaged app where .env might not be included
+process.env.DB_NAME = process.env.DB_NAME || 'jeeva_construction';
+process.env.DB_USER = process.env.DB_USER || 'root';
+process.env.DB_PASS = process.env.DB_PASS || '12345678';
+process.env.DB_HOST = process.env.DB_HOST || '127.0.0.1';
+process.env.PORT = process.env.PORT || 5000;
+
 const { sequelize } = require('./models');
 const ensureDatabaseExists = require('./config/dbInit');
 
@@ -37,7 +45,7 @@ async function startServer() {
         console.log('Database connected...');
         
         // Use alter: true to automatically update tables when models change
-        await sequelize.sync({ alter: true });
+        await sequelize.sync();
         console.log('Database synchronized.');
 
         // 3. Ensure Default Admin User exists
@@ -68,3 +76,4 @@ async function startServer() {
 }
 
 startServer();
+// Trigger nodemon restart

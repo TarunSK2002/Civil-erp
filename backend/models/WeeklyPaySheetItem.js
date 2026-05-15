@@ -5,7 +5,8 @@ const WeeklyPaySheetItem = sequelize.define('WeeklyPaySheetItem', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        field: 'Id'
     },
     WeeklyPaySheetId: {
         type: DataTypes.INTEGER,

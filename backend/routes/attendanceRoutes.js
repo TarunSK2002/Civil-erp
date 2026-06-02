@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { AttendanceSheet, AttendanceRecord, AttendanceMisc, ShiftMaster, Payee, Site, Payment, sequelize } = require('../models');
+const { AttendanceSheet, AttendanceRecord, AttendanceMisc, ShiftMaster, PersonType, Payee, Site, Payment, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // ============ SHEET CRUD ============
@@ -124,6 +124,7 @@ router.get('/:id', async (req, res) => {
             grid[key].records.push({
                 id: rec.id,
                 date: rec.AttendanceDate,
+                personType: rec.PersonType || 'Mason',
                 shiftType: rec.ShiftType,
                 shiftMultiplier: parseFloat(rec.ShiftMultiplier),
                 labourCount: rec.LabourCount,
@@ -176,8 +177,8 @@ router.get('/:id', async (req, res) => {
             selectedSiteIds
         });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error(err.message, err.stack);
+        res.status(500).json({ msg: 'Server Error', error: err.message, stack: err.stack });
     }
 });
 
@@ -262,9 +263,13 @@ router.post('/:id/sync-sites', async (req, res) => {
 
         await sheet.update({ SelectedSiteIds: requestedIds }, { transaction: t });
 
-        // Remove records for removed sites
+        // Remove records and misc for removed sites
         for (const siteId of removedIds) {
             await AttendanceRecord.destroy({
+                where: { AttendanceSheetId: sheet.id, SiteId: siteId },
+                transaction: t
+            });
+            await AttendanceMisc.destroy({
                 where: { AttendanceSheetId: sheet.id, SiteId: siteId },
                 transaction: t
             });
@@ -329,6 +334,10 @@ router.delete('/:id/sites/:siteId', async (req, res) => {
             where: { AttendanceSheetId: sheet.id, SiteId: siteId },
             transaction: t
         });
+        await AttendanceMisc.destroy({
+            where: { AttendanceSheetId: sheet.id, SiteId: siteId },
+            transaction: t
+        });
 
         await t.commit();
         res.json({ msg: 'Site and associated records removed' });
@@ -344,23 +353,25 @@ router.delete('/:id/sites/:siteId', async (req, res) => {
 // @route   POST /api/attendance-sheets/:id/records
 // @desc    Add a shift attendance record
 router.post('/:id/records', async (req, res) => {
-    const { PayeeId, SiteId, AttendanceDate, ShiftType, ShiftMultiplier, LabourCount } = req.body;
+    const { PayeeId, SiteId, AttendanceDate, PersonType: personTypeName, ShiftType, ShiftMultiplier, LabourCount } = req.body;
     try {
         const sheet = await AttendanceSheet.findByPk(req.params.id);
         if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
 
-        // Get rate from ShiftMaster
-        const shiftMaster = await ShiftMaster.findOne({
-            where: { ShiftMultiplier: parseFloat(ShiftMultiplier) }
+        // Get rate from PersonType DailyRate
+        const personTypeRecord = await PersonType.findOne({
+            where: { Name: personTypeName || 'Mason' }
         });
 
-        const rate = shiftMaster ? parseFloat(shiftMaster.Rate) : 0;
+        const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+        const rate = dailyRate * parseFloat(ShiftMultiplier);
         const calculatedAmount = parseInt(LabourCount) * rate;
 
         const record = await AttendanceRecord.create({
             AttendanceSheetId: parseInt(req.params.id),
             PayeeId: parseInt(PayeeId),
             SiteId: parseInt(SiteId),
+            PersonType: personTypeName || 'Mason',
             AttendanceDate,
             ShiftType,
             ShiftMultiplier: parseFloat(ShiftMultiplier),
@@ -369,30 +380,34 @@ router.post('/:id/records', async (req, res) => {
             CalculatedAmount: calculatedAmount
         });
 
+        await syncMiscAllowances(record.AttendanceSheetId, record.PayeeId, record.SiteId);
+
         res.json(record);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error('POST record error:', err);
+        res.status(500).json({ msg: 'Server Error: ' + err.message });
     }
 });
 
 // @route   PUT /api/attendance-sheets/:id/records/:recordId
 // @desc    Update a shift attendance record
 router.put('/:id/records/:recordId', async (req, res) => {
-    const { ShiftType, ShiftMultiplier, LabourCount } = req.body;
+    const { PersonType: personTypeName, ShiftType, ShiftMultiplier, LabourCount } = req.body;
     try {
         const record = await AttendanceRecord.findByPk(req.params.recordId);
         if (!record) return res.status(404).json({ msg: 'Record not found' });
 
-        // Get rate from ShiftMaster
-        const shiftMaster = await ShiftMaster.findOne({
-            where: { ShiftMultiplier: parseFloat(ShiftMultiplier) }
+        // Get rate from PersonType DailyRate
+        const personTypeRecord = await PersonType.findOne({
+            where: { Name: personTypeName || record.PersonType }
         });
 
-        const rate = shiftMaster ? parseFloat(shiftMaster.Rate) : 0;
+        const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+        const rate = dailyRate * parseFloat(ShiftMultiplier);
         const calculatedAmount = parseInt(LabourCount) * rate;
 
         await record.update({
+            PersonType: personTypeName || record.PersonType,
             ShiftType,
             ShiftMultiplier: parseFloat(ShiftMultiplier),
             LabourCount: parseInt(LabourCount),
@@ -400,10 +415,12 @@ router.put('/:id/records/:recordId', async (req, res) => {
             CalculatedAmount: calculatedAmount
         });
 
+        await syncMiscAllowances(record.AttendanceSheetId, record.PayeeId, record.SiteId);
+
         res.json(record);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error('PUT record error:', err);
+        res.status(500).json({ msg: 'Server Error: ' + err.message });
     }
 });
 
@@ -414,11 +431,18 @@ router.delete('/:id/records/:recordId', async (req, res) => {
         const record = await AttendanceRecord.findByPk(req.params.recordId);
         if (!record) return res.status(404).json({ msg: 'Record not found' });
 
+        const sheetId = record.AttendanceSheetId;
+        const payeeId = record.PayeeId;
+        const siteId = record.SiteId;
+
         await record.destroy();
+
+        await syncMiscAllowances(sheetId, payeeId, siteId);
+
         res.json({ msg: 'Record removed' });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error('DELETE record error:', err);
+        res.status(500).json({ msg: 'Server Error: ' + err.message });
     }
 });
 
@@ -461,5 +485,82 @@ router.delete('/:id/misc/:miscId', async (req, res) => {
         res.status(500).json({ msg: 'Server Error' });
     }
 });
+
+async function syncMiscAllowances(sheetId, payeeId, siteId) {
+    try {
+        const { AttendanceRecord, AttendanceMisc } = require('../models');
+
+        const records = await AttendanceRecord.findAll({
+            where: { AttendanceSheetId: sheetId, PayeeId: payeeId, SiteId: siteId }
+        });
+        const weeklySiteLabourCount = records.reduce((sum, r) => sum + (r.LabourCount || 0), 0);
+
+        const [rows] = await sequelize.query("SELECT * FROM master_settings WHERE SettingKey IN ('TeaExpense', 'BusExpense')");
+        let teaRate = 20;
+        let busRate = 50;
+        rows.forEach(r => {
+            if (r.SettingKey === 'TeaExpense') teaRate = parseFloat(r.SettingValue) || 20;
+            if (r.SettingKey === 'BusExpense') busRate = parseFloat(r.SettingValue) || 50;
+        });
+
+        // Sync Tea Charges
+        const teaMisc = await AttendanceMisc.findOne({
+            where: { AttendanceSheetId: sheetId, PayeeId: payeeId, SiteId: siteId, MiscName: 'Tea Charges' }
+        });
+        if (teaMisc) {
+            if (weeklySiteLabourCount === 0) {
+                await teaMisc.destroy();
+            } else {
+                await teaMisc.update({ Amount: weeklySiteLabourCount * teaRate });
+            }
+        } else if (weeklySiteLabourCount > 0) {
+            await AttendanceMisc.create({
+                AttendanceSheetId: sheetId,
+                PayeeId: payeeId,
+                SiteId: siteId,
+                MiscName: 'Tea Charges',
+                Amount: weeklySiteLabourCount * teaRate
+            });
+        }
+
+        // Sync Bus Charges
+        const busMisc = await AttendanceMisc.findOne({
+            where: { AttendanceSheetId: sheetId, PayeeId: payeeId, SiteId: siteId, MiscName: 'Bus Charges' }
+        });
+        if (busMisc) {
+            if (weeklySiteLabourCount === 0) {
+                await busMisc.destroy();
+            } else {
+                await busMisc.update({ Amount: weeklySiteLabourCount * busRate });
+            }
+        } else if (weeklySiteLabourCount > 0) {
+            await AttendanceMisc.create({
+                AttendanceSheetId: sheetId,
+                PayeeId: payeeId,
+                SiteId: siteId,
+                MiscName: 'Bus Charges',
+                Amount: weeklySiteLabourCount * busRate
+            });
+        }
+
+        // Sync Mason Profit (if percentage-based)
+        const allMiscs = await AttendanceMisc.findAll({
+            where: { AttendanceSheetId: sheetId, PayeeId: payeeId, SiteId: siteId }
+        });
+        for (const m of allMiscs) {
+            const match = m.MiscName.match(/Mason Profit \((\d+(\.\d+)?)\%\)/);
+            if (match) {
+                const percent = parseFloat(match[1]);
+                if (!isNaN(percent)) {
+                    const weeklySiteAttendance = records.reduce((sum, r) => sum + parseFloat(r.CalculatedAmount || 0), 0);
+                    const newProfitAmount = (weeklySiteAttendance * percent) / 100;
+                    await m.update({ Amount: newProfitAmount });
+                }
+            }
+        }
+    } catch (err) {
+        console.error('syncMiscAllowances Error:', err);
+    }
+}
 
 module.exports = router;

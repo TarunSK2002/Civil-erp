@@ -7,10 +7,8 @@ import api from '../api/axios';
 const ShiftMasterPage = () => {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState(null);
-  const [editRate, setEditRate] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newForm, setNewForm] = useState({ ShiftType: '', ShiftMultiplier: '', Rate: '' });
+  const [newForm, setNewForm] = useState({ ShiftType: '', ShiftMultiplier: '' });
 
   useEffect(() => {
     fetchShifts();
@@ -33,18 +31,6 @@ const ShiftMasterPage = () => {
     }
   };
 
-  const handleSaveRate = async (shift) => {
-    try {
-      await api.put(`/shift-master/${shift.id}`, {
-        ...shift,
-        Rate: parseFloat(editRate) || 0
-      });
-      setEditingId(null);
-      fetchShifts();
-    } catch (err) {
-      alert(err.response?.data?.msg || 'Failed to update');
-    }
-  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this shift type?')) return;
@@ -62,10 +48,10 @@ const ShiftMasterPage = () => {
       await api.post('/shift-master', {
         ShiftType: newForm.ShiftType,
         ShiftMultiplier: parseFloat(newForm.ShiftMultiplier),
-        Rate: parseFloat(newForm.Rate) || 0
+        Rate: 0
       });
       setShowAddForm(false);
-      setNewForm({ ShiftType: '', ShiftMultiplier: '', Rate: '' });
+      setNewForm({ ShiftType: '', ShiftMultiplier: '' });
       fetchShifts();
     } catch (err) {
       alert(err.response?.data?.msg || 'Failed to add');
@@ -94,7 +80,7 @@ const ShiftMasterPage = () => {
             Shift Master
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            Configure shift types and their salary rates. These rates are used to auto-calculate attendance salary.
+            Configure shift types and multipliers. Salary rates are managed in Person Types.
           </p>
         </div>
         <button
@@ -120,7 +106,6 @@ const ShiftMasterPage = () => {
         alignContent: 'start'
       }}>
         {shifts.map(shift => {
-          const isEditing = editingId === shift.id;
           const multiplier = parseFloat(shift.ShiftMultiplier);
           const colors = {
             0.5: { bg: 'rgba(156, 39, 176, 0.08)', border: 'rgba(156, 39, 176, 0.2)', color: '#CE93D8', accent: '#9C27B0' },
@@ -171,73 +156,19 @@ const ShiftMasterPage = () => {
                 </div>
               </div>
 
-              {/* Rate */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{
-                  fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
-                  textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6
-                }}>
-                  Rate Per Shift
-                </div>
-                {isEditing ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      type="number"
-                      value={editRate}
-                      onChange={(e) => setEditRate(e.target.value)}
-                      autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveRate(shift)}
-                      style={{
-                        flex: 1, background: 'var(--bg-input)', border: '1px solid var(--border)',
-                        borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)',
-                        fontSize: 16, fontWeight: 800, outline: 'none', fontFamily: 'inherit'
-                      }}
-                    />
-                    <button
-                      onClick={() => handleSaveRate(shift)}
-                      style={{
-                        background: 'rgba(76, 175, 80, 0.15)', color: '#4CAF50',
-                        border: '1px solid rgba(76, 175, 80, 0.3)', borderRadius: 8,
-                        padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center'
-                      }}
-                    >
-                      <Save size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => { setEditingId(shift.id); setEditRate(String(shift.Rate || '')); }}
-                    style={{
-                      fontSize: 28, fontWeight: 900, color: 'var(--text-primary)',
-                      cursor: 'pointer', transition: 'color 0.2s'
-                    }}
-                  >
-                    {fmt(shift.Rate)}
-                  </div>
-                )}
-              </div>
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
-                  onClick={() => { setEditingId(shift.id); setEditRate(String(shift.Rate || '')); }}
-                  style={{
-                    flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 12,
-                    fontWeight: 600, border: `1px solid ${c.border}`, background: 'transparent',
-                    color: c.color, cursor: 'pointer', transition: 'all 0.2s'
-                  }}
-                >
-                  Edit Rate
-                </button>
-                <button
                   onClick={() => handleDelete(shift.id)}
                   style={{
-                    padding: '8px 12px', borderRadius: 8, fontSize: 12,
+                    flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 12,
                     border: '1px solid rgba(244, 67, 54, 0.2)', background: 'rgba(244, 67, 54, 0.08)',
-                    color: '#F44336', cursor: 'pointer', display: 'flex', alignItems: 'center'
+                    color: '#F44336', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', gap: 4
                   }}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={14} /> Delete
                 </button>
               </div>
             </div>
@@ -283,23 +214,6 @@ const ShiftMasterPage = () => {
                 placeholder="e.g. 4"
                 value={newForm.ShiftMultiplier}
                 onChange={e => setNewForm({ ...newForm, ShiftMultiplier: e.target.value })}
-                style={{
-                  width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)',
-                  borderRadius: 10, padding: '10px 14px', color: 'var(--text-primary)',
-                  fontSize: 14, outline: 'none', fontFamily: 'inherit'
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                Rate (₹)
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 800"
-                value={newForm.Rate}
-                onChange={e => setNewForm({ ...newForm, Rate: e.target.value })}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 style={{
                   width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)',
                   borderRadius: 10, padding: '10px 14px', color: 'var(--text-primary)',

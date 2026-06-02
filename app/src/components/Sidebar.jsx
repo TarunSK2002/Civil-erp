@@ -17,7 +17,8 @@ import {
   Table2,
   UserCheck,
   ClipboardCheck,
-  Settings2
+  Settings2,
+  Wallet
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -123,7 +124,7 @@ const Sidebar = ({ expanded }) => {
         <SidebarItem to="/sites/status" icon={ClipboardList} label="Site Status" expanded={expanded} />
         <SidebarItem to="/materials/purchase" icon={ShoppingCart} label="Purchase" expanded={expanded} />
         <SidebarItem to="/labour" icon={HardHat} label="Labour" expanded={expanded} />
-        <SidebarItem to="/materials" icon={Package} label="Materials" expanded={expanded} />
+        <SidebarItem to="/materials" icon={Package} label="Dealers" expanded={expanded} />
         <SidebarItem to="/payments" icon={CreditCard} label="Payments" expanded={expanded} />
         <SidebarItem to="/reports" icon={BarChart3} label="Reports" expanded={expanded} />
         
@@ -131,8 +132,10 @@ const Sidebar = ({ expanded }) => {
 
         <SidebarItem to="/payees" icon={UserCheck} label="Payees" expanded={expanded} />
         <SidebarItem to="/weekly-pay-sheet" icon={Table2} label="Weekly Pay Sheet" expanded={expanded} />
+        <SidebarItem to="/personal-expenses" icon={Wallet} label="Petty Cash" expanded={expanded} />
         <SidebarItem to="/attendance-pay-sheet" icon={ClipboardCheck} label="Attendance Sheet" expanded={expanded} />
         <SidebarItem to="/shift-master" icon={Settings2} label="Shift Master" expanded={expanded} />
+        <SidebarItem to="/person-type-master" icon={Users} label="Person Types" expanded={expanded} />
         
         {user?.role === 'ADMIN' && (
           <SidebarItem to="/admin" icon={Shield} label="Employee MGMT" expanded={expanded} />

@@ -33,6 +33,11 @@ app.use('/api/weekly-pay-sheets', require('./routes/weeklyPaySheetRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/shift-master', require('./routes/shiftMasterRoutes'));
 app.use('/api/attendance-sheets', require('./routes/attendanceRoutes'));
+app.use('/api/person-types', require('./routes/personTypeRoutes'));
+app.use('/api/material-types', require('./routes/materialTypeRoutes'));
+app.use('/api/petty-cash', require('./routes/pettyCashRoutes'));
+app.use('/api/personal-expenses', require('./routes/personalExpenseRoutes'));
+app.use('/api/master-settings', require('./routes/masterSettingsRoutes'));
 
 // Database Initialization & Server Start
 async function startServer() {
@@ -43,8 +48,35 @@ async function startServer() {
         // 2. Connect and Sync
         await sequelize.authenticate();
         console.log('Database connected...');
-        
-        // Use alter: true to automatically update tables when models change
+
+        // Safe schema migrations — each silently skips if column already exists
+        const migrations = [
+            "ALTER TABLE attendance_records ADD COLUMN PersonType VARCHAR(30) NOT NULL DEFAULT 'Mason';",
+            "ALTER TABLE person_types ADD COLUMN DailyRate DECIMAL(18,2) NOT NULL DEFAULT 0;",
+            "ALTER TABLE materials ADD COLUMN DealerName VARCHAR(100) DEFAULT '';",
+            "ALTER TABLE materials ADD COLUMN MobileNo VARCHAR(15) DEFAULT '';",
+            "ALTER TABLE materials ADD COLUMN AccountNo VARCHAR(30) DEFAULT '';",
+            "ALTER TABLE materials ADD COLUMN MaterialTypeId INT DEFAULT NULL;",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN IsSkipped TINYINT(1) NOT NULL DEFAULT 0;",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN SkippedToSheetId INT DEFAULT NULL;",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN IsExtraPayment TINYINT(1) NOT NULL DEFAULT 0;",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN ExtraPaymentDescription VARCHAR(255) DEFAULT NULL;",
+            "ALTER TABLE weekly_pay_sheets ADD COLUMN Status VARCHAR(20) NOT NULL DEFAULT 'Open';",
+            "ALTER TABLE material_types ADD COLUMN Price DECIMAL(18,2) NOT NULL DEFAULT 0;",
+            "ALTER TABLE material_types ADD COLUMN DefaultUnit VARCHAR(50) DEFAULT 'nos';",
+            `CREATE TABLE IF NOT EXISTS master_settings (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                SettingKey VARCHAR(100) NOT NULL UNIQUE,
+                SettingValue VARCHAR(255) NOT NULL DEFAULT '',
+                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            );`,
+            `INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50');`
+        ];
+        for (const sql of migrations) {
+            try { await sequelize.query(sql); } catch (e) { /* column already exists */ }
+        }
+
+        // Use standard sync to avoid foreign key drop errors
         await sequelize.sync();
         console.log('Database synchronized.');
 
@@ -55,7 +87,7 @@ async function startServer() {
             const bcrypt = require('bcryptjs');
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash('admin123', salt);
-            
+
             await User.create({
                 Username: 'admin',
                 PasswordHash: hashedPassword,
@@ -76,4 +108,4 @@ async function startServer() {
 }
 
 startServer();
-// Trigger nodemon restart
+// Trigger nodemon restart 2

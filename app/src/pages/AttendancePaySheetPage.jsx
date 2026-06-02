@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle } from 'lucide-react';
+import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown } from 'lucide-react';
 import api from '../api/axios';
-import AttendanceEntryPanel, { MiscPanel } from './AttendanceEntryPanel';
+import AttendanceEntryPanel from './AttendanceEntryPanel';
 import './AttendancePaySheetPage.css';
 
 const AttendancePaySheetPage = () => {
@@ -16,7 +16,7 @@ const AttendancePaySheetPage = () => {
   const [showAddPayeeModal, setShowAddPayeeModal] = useState(false);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [showEntryPanel, setShowEntryPanel] = useState(null);
-  const [showMiscPanel, setShowMiscPanel] = useState(null);
+  const [showMasterSettings, setShowMasterSettings] = useState(false);
 
   const [allPayees, setAllPayees] = useState([]);
   const [allSites, setAllSites] = useState([]);
@@ -29,13 +29,18 @@ const AttendancePaySheetPage = () => {
   const [entrySiteId, setEntrySiteId] = useState('');
   const [entryPayeeId, setEntryPayeeId] = useState('');
 
+  // Master settings (Tea + Bus expense per labour per day)
+  const [masterSettings, setMasterSettings] = useState({ TeaExpense: '20', BusExpense: '50' });
+  const [editingMaster, setEditingMaster] = useState({ TeaExpense: '', BusExpense: '' });
+  const [savingMaster, setSavingMaster] = useState(false);
+
   const newSheetTitleRef = useRef(null);
   const [newSheetForm, setNewSheetForm] = useState({
     Title: '', WeekStartDate: new Date().toISOString().split('T')[0],
     WeekEndDate: (() => { const d = new Date(); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]; })()
   });
 
-  useEffect(() => { fetchSheets(); fetchAllPayees(); fetchAllSites(); fetchShiftTypes(); }, []);
+  useEffect(() => { fetchSheets(); fetchAllPayees(); fetchAllSites(); fetchShiftTypes(); fetchMasterSettings(); }, []);
   useEffect(() => { if (selectedSheetId) fetchSheetData(selectedSheetId); }, [selectedSheetId]);
   useEffect(() => { if (showNewSheetModal) setTimeout(() => newSheetTitleRef.current?.focus(), 150); }, [showNewSheetModal]);
   useEffect(() => { if (showAddPayeeModal && sheetData?.selectedPayeeIds) setSelectedPayeeIds(sheetData.selectedPayeeIds); }, [showAddPayeeModal, sheetData]);
@@ -53,6 +58,31 @@ const AttendancePaySheetPage = () => {
   const fetchAllPayees = async () => { try { const r = await api.get('/payees'); setAllPayees(r.data); } catch(e) { console.error(e); } };
   const fetchAllSites = async () => { try { const r = await api.get('/sites'); setAllSites(r.data); } catch(e) { console.error(e); } };
   const fetchShiftTypes = async () => { try { const r = await api.get('/shift-master'); setShiftTypes(r.data); } catch(e) { console.error(e); } };
+  const fetchMasterSettings = async () => {
+    try {
+      const r = await api.get('/master-settings');
+      setMasterSettings({ TeaExpense: r.data.TeaExpense || '20', BusExpense: r.data.BusExpense || '50' });
+      setEditingMaster({ TeaExpense: r.data.TeaExpense || '20', BusExpense: r.data.BusExpense || '50' });
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const handleSaveMasterSettings = async () => {
+    setSavingMaster(true);
+    try {
+      await Promise.all([
+        api.put('/master-settings/TeaExpense', { value: editingMaster.TeaExpense }),
+        api.put('/master-settings/BusExpense', { value: editingMaster.BusExpense })
+      ]);
+      setMasterSettings({ ...editingMaster });
+      setShowMasterSettings(false);
+    } catch(e) {
+      alert('Failed to save settings');
+    } finally {
+      setSavingMaster(false);
+    }
+  };
 
   const handleCreateSheet = async () => {
     if (!newSheetForm.Title.trim()) return;
@@ -82,26 +112,83 @@ const AttendancePaySheetPage = () => {
     catch (err) { alert(err.response?.data?.msg || 'Failed'); }
   };
 
-  const getRowTotal = (payeeId) => {
-    if (!sheetData?.grid || !sheetData?.sites) return 0;
-    return sheetData.sites.reduce((sum, site) => {
-      const key = `${payeeId}_${site.id}`;
-      return sum + (sheetData.grid[key]?.totalAmount || 0);
-    }, 0);
+  // ---- Computed values (DATE-SPECIFIC for selected entryDate) ----
+
+  // Get total attendance for a payee+site for the SELECTED DATE
+  const getDateCellAmount = (payeeId, siteId) => {
+    if (!sheetData?.grid) return 0;
+    const key = `${payeeId}_${siteId}`;
+    const records = sheetData.grid[key]?.records || [];
+    return records
+      .filter(r => r.date === entryDate)
+      .reduce((sum, r) => sum + r.calculatedAmount, 0);
+  };
+
+  // Get total labour count for a payee+site for the SELECTED DATE (for tea/bus calculation)
+  const getDateLabourCount = (payeeId, siteId) => {
+    if (!sheetData?.grid) return 0;
+    const key = `${payeeId}_${siteId}`;
+    const records = sheetData.grid[key]?.records || [];
+    return records
+      .filter(r => r.date === entryDate)
+      .reduce((sum, r) => sum + r.labourCount, 0);
+  };
+
+  // Total attendance for a payee across all sites for selected date (no tea/bus)
+  const getDateRowAttendance = (payeeId) => {
+    if (!sheetData?.sites) return 0;
+    return sheetData.sites.reduce((sum, site) => sum + getDateCellAmount(payeeId, site.id), 0);
+  };
+
+  // Column total for selected date
+  const getDateColTotal = (siteId) => {
+    if (!sheetData?.payees) return 0;
+    return sheetData.payees.reduce((sum, p) => sum + getDateCellAmount(p.id, siteId), 0);
+  };
+
+  // Total attendance for all payees for selected date (no tea/bus)
+  const getTotalDateAttendance = () => {
+    if (!sheetData?.payees) return 0;
+    return sheetData.payees.reduce((sum, p) => sum + getDateRowAttendance(p.id), 0);
+  };
+
+  const getPayeeWeeklyAttendance = (payeeId) => {
+    if (!sheetData?.grid) return 0;
+    let total = 0;
+    Object.keys(sheetData.grid).forEach(key => {
+      if (key.startsWith(`${payeeId}_`)) {
+        const records = sheetData.grid[key].records || [];
+        records.forEach(r => {
+          total += r.calculatedAmount || 0;
+        });
+      }
+    });
+    return total;
+  };
+
+  const getPayeeWeeklyLabourCount = (payeeId) => {
+    if (!sheetData?.grid) return 0;
+    let count = 0;
+    Object.keys(sheetData.grid).forEach(key => {
+      if (key.startsWith(`${payeeId}_`)) {
+        const records = sheetData.grid[key].records || [];
+        records.forEach(r => {
+          count += r.labourCount || 0;
+        });
+      }
+    });
+    return count;
+  };
+
+  const getWeeklySiteLabourCount = (payeeId, siteId) => {
+    if (!sheetData?.grid) return 0;
+    const key = `${payeeId}_${siteId}`;
+    const records = sheetData.grid[key]?.records || [];
+    return records.reduce((sum, r) => sum + (r.labourCount || 0), 0);
   };
 
   const getMiscTotal = (payeeId) => sheetData?.miscData?.[payeeId]?.total || 0;
-  const getRowGrand = (payeeId) => getRowTotal(payeeId) + getMiscTotal(payeeId);
-
-  const getColTotal = (siteId) => {
-    if (!sheetData?.grid || !sheetData?.payees) return 0;
-    return sheetData.payees.reduce((sum, p) => {
-      const key = `${p.id}_${siteId}`;
-      const attendanceAmt = sheetData.grid[key]?.totalAmount || 0;
-      const miscAmt = sheetData.miscData?.[p.id]?.siteTotals?.[siteId] || 0;
-      return sum + attendanceAmt + miscAmt;
-    }, 0);
-  };
+  const getRowGrand = (payeeId) => getDateRowAttendance(payeeId) + getMiscTotal(payeeId);
 
   const getGrandTotal = () => {
     if (!sheetData?.payees) return 0;
@@ -110,7 +197,7 @@ const AttendancePaySheetPage = () => {
 
   const getTotalAttendance = () => {
     if (!sheetData?.payees) return 0;
-    return sheetData.payees.reduce((sum, p) => sum + getRowTotal(p.id), 0);
+    return sheetData.payees.reduce((sum, p) => sum + getDateRowAttendance(p.id), 0);
   };
 
   const getTotalMisc = () => {
@@ -142,19 +229,27 @@ const AttendancePaySheetPage = () => {
 
   if (loading) return <div className="aps-container"><div className="aps-loading"><Loader2 size={32} className="aps-spinner" /></div></div>;
 
+  const totalAttendanceOnly = getTotalDateAttendance();
+
   return (
     <div className="aps-container">
       <div className="aps-header">
         <div><h1>Attendance Pay Sheet</h1><p>Track daily attendance with shift-based salary calculation</p></div>
         <div className="aps-header-actions">
+          <button
+            className="aps-btn aps-btn-secondary"
+            onClick={() => { setEditingMaster({ ...masterSettings }); setShowMasterSettings(true); }}
+            style={{ background: 'rgba(255,152,0,0.1)', color: '#FF9800', border: '1px solid rgba(255,152,0,0.3)' }}
+          >
+            <Settings size={16} /> Master Settings
+          </button>
           <button className="aps-btn aps-btn-primary" onClick={() => setShowNewSheetModal(true)}><Plus size={18} /> New Sheet</button>
         </div>
       </div>
 
       {sheetData && (
         <div className="aps-summary">
-          <div className="aps-summary-card total"><div className="aps-summary-label">Grand Total</div><div className="aps-summary-value">{fmt(getGrandTotal())}</div></div>
-          <div className="aps-summary-card attendance"><div className="aps-summary-label">Attendance</div><div className="aps-summary-value" style={{color:'#7C4DFF'}}>{fmt(getTotalAttendance())}</div></div>
+          <div className="aps-summary-card total"><div className="aps-summary-label">Date Attendance</div><div className="aps-summary-value">{fmt(totalAttendanceOnly)}</div></div>
           <div className="aps-summary-card misc"><div className="aps-summary-label">Misc Charges</div><div className="aps-summary-value" style={{color:'#00BCD4'}}>{fmt(getTotalMisc())}</div></div>
           <div className="aps-summary-card info"><div className="aps-summary-label">Sites × Masons</div><div className="aps-summary-value">{sheetData.sites?.length||0} × {sheetData.payees?.length||0}</div></div>
         </div>
@@ -200,6 +295,10 @@ const AttendancePaySheetPage = () => {
           <button className="aps-btn aps-btn-primary aps-btn-sm" onClick={handleOpenEntry} style={{ background: '#7C4DFF', marginBottom: 1 }}>
             <PlusCircle size={14} /> Mark Attendance
           </button>
+          {/* Date info badge */}
+          <div style={{ marginLeft: 'auto', background: 'rgba(124,77,255,0.1)', border: '1px solid rgba(124,77,255,0.2)', borderRadius: 8, padding: '4px 12px', fontSize: 11, color: '#7C4DFF', fontWeight: 700, alignSelf: 'flex-end', marginBottom: 1 }}>
+            📅 Showing data for: {new Date(entryDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+          </div>
         </div>
       )}
 
@@ -228,61 +327,53 @@ const AttendancePaySheetPage = () => {
             <thead><tr>
               <th>Mason</th>
               {sheetData.sites.map(site => <th key={site.id}><div className="aps-site-header"><span className="aps-site-name">{site.SiteName}</span></div></th>)}
-              <th style={{ color: '#00BCD4' }}>MISC</th>
               <th>TOTAL</th>
             </tr></thead>
             <tbody>
-              {sheetData.payees.map(payee => (
-                <tr key={payee.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div className="aps-payee-name">
-                        <div className={`aps-payee-badge ${payee.Type}`}>{payee.Name.charAt(0)}</div>
-                        <div><div className="aps-payee-label">{payee.Name}</div><div className="aps-payee-type">{payee.Type}</div></div>
-                      </div>
-                    </div>
-                  </td>
-                                {sheetData.sites.map(site => {
-                    const key = `${payee.id}_${site.id}`;
-                    const cellData = sheetData.grid?.[key];
-                    const attendanceAmt = cellData?.totalAmount || 0;
-                    const miscAmt = sheetData.miscData?.[payee.id]?.siteTotals?.[site.id] || 0;
-                    const totalAmt = attendanceAmt + miscAmt;
-                    const recordCount = cellData?.records?.length || 0;
-                    
-                    return (
-                      <td key={site.id}>
-                        <div className={`aps-cell ${totalAmt > 0 ? 'has-value' : 'empty'}`} onClick={() => handleCellClick(payee.id, site.id)}>
-                          {totalAmt > 0 ? <>
-                            <span className="aps-cell-amount">{fmt(totalAmt)}</span>
-                            {attendanceAmt > 0 && <span className="aps-cell-detail">{recordCount} entries</span>}
-                            {miscAmt > 0 && <span className="aps-cell-detail" style={{color:'#00BCD4'}}>+ {fmt(miscAmt)} misc</span>}
-                          </> : <span>—</span>}
+              {sheetData.payees.map(payee => {
+                const rowAttendance = getDateRowAttendance(payee.id);
+                const miscTotal = getMiscTotal(payee.id);
+
+                return (
+                  <tr key={payee.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="aps-payee-name">
+                          <div className={`aps-payee-badge ${payee.Type}`}>{payee.Name.charAt(0)}</div>
+                          <div><div className="aps-payee-label">{payee.Name}</div><div className="aps-payee-type">{payee.Type}</div></div>
                         </div>
-                      </td>
-                    );
-                  })}
-                  <td>
-                    <div className="aps-misc-cell" onClick={() => setShowMiscPanel({ payeeId: payee.id, payeeName: payee.Name })}>
-                      {/* Only show general MIS here (those without siteId) */}
-                      {(() => {
-                        const generalMisc = (sheetData.miscData?.[payee.id]?.items || []).filter(m => !m.siteId);
-                        const generalTotal = generalMisc.reduce((s, m) => s + m.amount, 0);
-                        return generalTotal > 0 ? <span className="aps-misc-badge">{fmt(generalTotal)}</span> : <PlusCircle size={14} color="var(--text-muted)" />;
-                      })()}
-                    </div>
-                  </td>
-                  <td>{fmt(getRowGrand(payee.id))}</td>
-                </tr>
-              ))}
+                      </div>
+                    </td>
+                    {sheetData.sites.map(site => {
+                      const dateAmt = getDateCellAmount(payee.id, site.id);
+                      const labourCount = getDateLabourCount(payee.id, site.id);
+
+                      return (
+                        <td key={site.id}>
+                          <div className={`aps-cell ${dateAmt > 0 ? 'has-value' : 'empty'}`} onClick={() => handleCellClick(payee.id, site.id)}>
+                            {dateAmt > 0 ? <>
+                              <span className="aps-cell-amount">{fmt(dateAmt)}</span>
+                              {labourCount > 0 && <span className="aps-cell-detail">{labourCount} workers</span>}
+                            </> : <span>—</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td>{fmt(rowAttendance)}</td>
+                  </tr>
+                );
+              })}
               <tr className="aps-total-row">
-                <td>SITE TOTAL</td>
-                {sheetData.sites.map(site => <td key={site.id}>{fmt(getColTotal(site.id))}</td>)}
-                <td style={{ color: '#00BCD4' }}>{fmt(getTotalMisc())}</td>
-                <td>{fmt(getGrandTotal())}</td>
+                <td>DATE TOTAL</td>
+                {sheetData.sites.map(site => <td key={site.id}>{fmt(getDateColTotal(site.id))}</td>)}
+                <td>{fmt(getTotalDateAttendance())}</td>
               </tr>
             </tbody>
           </table>
+
+
+
+
         </div>
       )}
 
@@ -369,6 +460,45 @@ const AttendancePaySheetPage = () => {
         </div>
       )}
 
+      {/* Master Settings Modal */}
+      {showMasterSettings && (
+        <div className="aps-modal-overlay" onClick={() => setShowMasterSettings(false)}>
+          <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', margin: 'auto', maxWidth: 400 }}>
+            <h2>Master Settings</h2>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
+              These values are multiplied by the number of working labours per day for Tea & Bus expense calculation.
+            </p>
+            <div className="aps-modal-field">
+              <label>Tea Expense per Labour (₹/day)</label>
+              <input
+                type="number"
+                value={editingMaster.TeaExpense}
+                onChange={e => setEditingMaster({ ...editingMaster, TeaExpense: e.target.value })}
+                placeholder="e.g. 20"
+              />
+            </div>
+            <div className="aps-modal-field">
+              <label>Bus Expense per Labour (₹/day)</label>
+              <input
+                type="number"
+                value={editingMaster.BusExpense}
+                onChange={e => setEditingMaster({ ...editingMaster, BusExpense: e.target.value })}
+                placeholder="e.g. 50"
+              />
+            </div>
+            <div style={{ background: 'rgba(255,152,0,0.08)', border: '1px solid rgba(255,152,0,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#FF9800', marginBottom: 16 }}>
+              Total per worker per day: ₹{(parseFloat(editingMaster.TeaExpense)||0) + (parseFloat(editingMaster.BusExpense)||0)}
+            </div>
+            <div className="aps-modal-actions">
+              <button className="aps-btn aps-btn-secondary" onClick={() => setShowMasterSettings(false)}>Cancel</button>
+              <button className="aps-btn aps-btn-primary" onClick={handleSaveMasterSettings} disabled={savingMaster}>
+                {savingMaster ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Attendance Entry Panel */}
       {showEntryPanel && (
         <div className="aps-modal-overlay" onClick={() => setShowEntryPanel(null)}>
@@ -377,6 +507,9 @@ const AttendancePaySheetPage = () => {
               sheetId={selectedSheetId} payeeId={showEntryPanel.payeeId} siteId={showEntryPanel.siteId}
               payeeName={showEntryPanel.payeeName} siteName={showEntryPanel.siteName} date={showEntryPanel.date}
               records={showEntryPanel.records} shiftTypes={shiftTypes}
+              masterSettings={masterSettings}
+              weeklySiteAttendance={sheetData?.grid?.[`${showEntryPanel.payeeId}_${showEntryPanel.siteId}`]?.totalAmount || 0}
+              weeklySiteLabourCount={getWeeklySiteLabourCount(showEntryPanel.payeeId, showEntryPanel.siteId)}
               onClose={() => setShowEntryPanel(null)}
               onSaved={() => { fetchSheetData(selectedSheetId); const key = `${showEntryPanel.payeeId}_${showEntryPanel.siteId}`;
                 api.get(`/attendance-sheets/${selectedSheetId}`).then(res => {
@@ -385,20 +518,6 @@ const AttendancePaySheetPage = () => {
                   setShowEntryPanel(prev => ({...prev, records: recs}));
                 });
               }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Misc Panel */}
-      {showMiscPanel && (
-        <div className="aps-modal-overlay" onClick={() => setShowMiscPanel(null)}>
-          <div onClick={e => e.stopPropagation()}>
-            <MiscPanel
-              sheetId={selectedSheetId} payeeId={showMiscPanel.payeeId} payeeName={showMiscPanel.payeeName}
-              miscItems={sheetData?.miscData?.[showMiscPanel.payeeId]?.items || []}
-              onClose={() => setShowMiscPanel(null)}
-              onSaved={() => { fetchSheetData(selectedSheetId); }}
             />
           </div>
         </div>

@@ -18,11 +18,6 @@ const ShiftMaster = sequelize.define('ShiftMaster', {
         allowNull: false
         // 0.5, 1, 1.5, 2, 2.5, 3
     },
-    Rate: {
-        type: DataTypes.DECIMAL(18, 2),
-        allowNull: false,
-        defaultValue: 0
-    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

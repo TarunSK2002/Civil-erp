@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Client, Site, Labour, Material, Payment, sequelize } = require('../models');
+const { Client, Site, Labour, Material, Payment, Payee, PersonType, ShiftMaster, MaterialType, SiteMaterial, AttendanceSheet, WeeklyPaySheet, PersonalExpense, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // @route   GET api/dashboard
@@ -13,6 +13,15 @@ router.get('/', async (req, res) => {
         const upcomingSites = await Site.count({ where: { Status: 'Upcoming' } });
         const totalLabours = await Labour.count();
         const totalMaterials = await Material.count();
+        
+        const totalPayees = await Payee.count();
+        const totalPersonTypes = await PersonType.count();
+        const totalShiftTypes = await ShiftMaster.count();
+        const totalMaterialTypes = await MaterialType.count();
+        const totalPurchases = await SiteMaterial.count();
+        const totalAttendanceSheets = await AttendanceSheet.count();
+        const totalWeeklySheets = await WeeklyPaySheet.count();
+        const totalPettyCash = await PersonalExpense.count();
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -37,7 +46,15 @@ router.get('/', async (req, res) => {
             totalLabours,
             totalMaterials,
             todayPayments,
-            pendingPayments
+            pendingPayments,
+            totalPayees,
+            totalPersonTypes,
+            totalShiftTypes,
+            totalMaterialTypes,
+            totalPurchases,
+            totalAttendanceSheets,
+            totalWeeklySheets,
+            totalPettyCash
         });
     } catch (err) {
         console.error(err.message);

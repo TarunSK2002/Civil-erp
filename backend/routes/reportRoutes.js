@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { SiteWorkValue, Site, Payment, Labour, SiteMaterial, Material, Payee, sequelize } = require('../models');
+const { SiteWorkValue, Site, Payment, Labour, SiteMaterial, Material, MaterialType, Payee, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // =============================================
@@ -216,7 +216,7 @@ router.get('/site/:siteId/material-detail', async (req, res) => {
         const materials = await SiteMaterial.findAll({
             where: { SiteId: siteId },
             include: [
-                { model: Material, as: 'Material', attributes: ['Name'] }
+                { model: MaterialType, as: 'Material', attributes: ['Name'] }
             ],
             attributes: [
                 'MaterialId',

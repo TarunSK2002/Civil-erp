@@ -14,6 +14,10 @@ const ShiftMaster = require('./ShiftMaster');
 const AttendanceSheet = require('./AttendanceSheet');
 const AttendanceRecord = require('./AttendanceRecord');
 const AttendanceMisc = require('./AttendanceMisc');
+const PersonType = require('./PersonType');
+const MaterialType = require('./MaterialType');
+const PettyCash = require('./PettyCash');
+const PersonalExpense = require('./PersonalExpense');
 
 // Associations
 
@@ -25,9 +29,9 @@ Site.belongsTo(Client, { foreignKey: 'ClientId', as: 'Client' });
 Site.hasMany(SiteMaterial, { foreignKey: 'SiteId', as: 'SiteMaterials' });
 SiteMaterial.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
 
-// Material <-> SiteMaterial (1:N)
-Material.hasMany(SiteMaterial, { foreignKey: 'MaterialId', as: 'SiteMaterials' });
-SiteMaterial.belongsTo(Material, { foreignKey: 'MaterialId', as: 'Material' });
+// MaterialType <-> SiteMaterial (1:N)
+MaterialType.hasMany(SiteMaterial, { foreignKey: 'MaterialId', as: 'SiteMaterials' });
+SiteMaterial.belongsTo(MaterialType, { foreignKey: 'MaterialId', as: 'Material' });
 
 // Site <-> Payment (1:N)
 Site.hasMany(Payment, { foreignKey: 'SiteId', as: 'Payments' });
@@ -48,6 +52,10 @@ Payment.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
 // WeeklyPaySheet <-> WeeklyPaySheetItem (1:N)
 WeeklyPaySheet.hasMany(WeeklyPaySheetItem, { foreignKey: 'WeeklyPaySheetId', as: 'Items' });
 WeeklyPaySheetItem.belongsTo(WeeklyPaySheet, { foreignKey: 'WeeklyPaySheetId', as: 'Sheet' });
+
+// WeeklyPaySheet <-> PettyCash (1:1)
+WeeklyPaySheet.hasOne(PettyCash, { foreignKey: 'WeeklyPaySheetId', as: 'PettyCashSnapshot' });
+PettyCash.belongsTo(WeeklyPaySheet, { foreignKey: 'WeeklyPaySheetId', as: 'Sheet' });
 
 // Payee <-> WeeklyPaySheetItem (1:N)
 Payee.hasMany(WeeklyPaySheetItem, { foreignKey: 'PayeeId', as: 'SheetItems' });
@@ -89,6 +97,10 @@ AttendanceMisc.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
 Site.hasMany(AttendanceMisc, { foreignKey: 'SiteId', as: 'AttendanceMiscs' });
 AttendanceMisc.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
 
+// MaterialType <-> Material (1:N)
+MaterialType.hasMany(Material, { foreignKey: 'MaterialTypeId', as: 'Materials' });
+Material.belongsTo(MaterialType, { foreignKey: 'MaterialTypeId', as: 'MaterialType' });
+
 module.exports = {
     sequelize,
     User,
@@ -105,5 +117,9 @@ module.exports = {
     ShiftMaster,
     AttendanceSheet,
     AttendanceRecord,
-    AttendanceMisc
+    AttendanceMisc,
+    PersonType,
+    MaterialType,
+    PettyCash,
+    PersonalExpense
 };

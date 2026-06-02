@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { SiteMaterial, Site, Material } = require('../models');
+const { SiteMaterial, Site, MaterialType } = require('../models');
 
 // @route   GET api/site-materials
 // @desc    Get all site material purchases (with details)
@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
         const purchases = await SiteMaterial.findAll({
             include: [
                 { model: Site, as: 'Site', attributes: ['SiteName'] },
-                { model: Material, as: 'Material', attributes: ['Name'] }
+                { model: MaterialType, as: 'Material', attributes: ['Name'] }
             ],
             order: [['PurchaseDate', 'DESC']]
         });

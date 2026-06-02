@@ -20,6 +20,12 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
         type: DataTypes.INTEGER,
         allowNull: false
     },
+    PersonType: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: 'Mason'
+        // "Mason", "Female Helper", "Male Helper", "Painter", "Tiles Layer", "Carpenter", "Driller", "Plumber", "Electrician"
+    },
     AttendanceDate: {
         type: DataTypes.DATEONLY,
         allowNull: false

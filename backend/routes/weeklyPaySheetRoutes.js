@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, sequelize } = require('../models');
+const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // ============ SHEET CRUD ============
@@ -60,13 +60,13 @@ router.post('/', async (req, res) => {
         });
         const selectedSiteIds = activeSites.map(s => s.id);
 
-        const sheet = await WeeklyPaySheet.create({ 
-            Title, 
+        const sheet = await WeeklyPaySheet.create({
+            Title,
             WeekDate,
             SelectedSiteIds: selectedSiteIds,
             SelectedPayeeIds: []
         });
-        
+
         console.log(`Created sheet ${sheet.id} with ${selectedSiteIds.length} sites`);
         res.json(sheet);
     } catch (err) {
@@ -110,7 +110,8 @@ router.get('/:id', async (req, res) => {
         if (selectedSiteIds.length > 0) {
             sites = await Site.findAll({
                 where: { id: { [Op.in]: selectedSiteIds } },
-                attributes: ['id', 'SiteName', 'SiteValue'],
+                attributes: ['id', 'SiteName', 'SiteValue', 'ClientId'],
+                include: [{ model: Client, as: 'Client', attributes: ['Name'] }],
                 order: [['SiteName', 'ASC']]
             });
         }
@@ -118,8 +119,24 @@ router.get('/:id', async (req, res) => {
         // Build grid from items
         const items = sheet.Items || [];
         const grid = {};
+        const extraPaymentData = {};
 
         items.forEach(item => {
+            if (item.IsExtraPayment) {
+                // Group extra payments by site
+                if (!extraPaymentData[item.SiteId]) {
+                    extraPaymentData[item.SiteId] = { total: 0, items: [] };
+                }
+                extraPaymentData[item.SiteId].total += parseFloat(item.Amount || 0);
+                extraPaymentData[item.SiteId].items.push({
+                    id: item.id,
+                    amount: parseFloat(item.Amount || 0),
+                    description: item.ExtraPaymentDescription || 'Additional works',
+                    paymentDate: item.PaymentDate
+                });
+                return;
+            }
+
             const key = item.PayeeId ? `${item.PayeeId}_${item.SiteId}` : `income_${item.SiteId}`;
             grid[key] = {
                 id: item.id,
@@ -128,7 +145,9 @@ router.get('/:id', async (req, res) => {
                 paymentId: item.PaymentId,
                 paymentDate: item.PaymentDate,
                 paymentMode: item.PaymentMode,
-                paymentNotes: item.PaymentNotes
+                paymentNotes: item.PaymentNotes,
+                isSkipped: item.IsSkipped || false,
+                skippedToSheetId: item.SkippedToSheetId
             };
         });
 
@@ -156,6 +175,23 @@ router.get('/:id', async (req, res) => {
             incomeData[c.SiteId] = (incomeData[c.SiteId] || 0) + parseFloat(c.Amount || 0);
         });
 
+        // Fetch cumulative collections up to the end of this week
+        const cumulativeCollections = await Payment.findAll({
+            where: {
+                PaymentCategory: 'Collection',
+                SiteId: { [Op.in]: selectedSiteIds },
+                PaymentDate: {
+                    [Op.lte]: weekEndDate
+                }
+            },
+            attributes: ['SiteId', 'Amount']
+        });
+
+        const cumulativeIncomeData = {};
+        cumulativeCollections.forEach(c => {
+            cumulativeIncomeData[c.SiteId] = (cumulativeIncomeData[c.SiteId] || 0) + parseFloat(c.Amount || 0);
+        });
+
         res.json({
             id: sheet.id,
             Title: sheet.Title,
@@ -166,6 +202,8 @@ router.get('/:id', async (req, res) => {
             sites,
             grid,
             incomeData,
+            cumulativeIncomeData,
+            extraPaymentData,
             selectedPayeeIds,
             selectedSiteIds
         });
@@ -207,7 +245,7 @@ router.delete('/:id', async (req, res) => {
             where: { WeeklyPaySheetId: req.params.id },
             transaction: t
         });
-        
+
         // Collect all payment IDs
         const paymentIds = items.map(it => it.PaymentId).filter(id => id != null);
 
@@ -679,7 +717,7 @@ router.delete('/:id/payees/:payeeId', async (req, res) => {
         const payeeId = parseInt(req.params.payeeId);
         const currentPayeeIds = sheet.SelectedPayeeIds || [];
         const updatedPayeeIds = currentPayeeIds.filter(id => id != payeeId);
-        
+
         await sheet.update({ SelectedPayeeIds: updatedPayeeIds }, { transaction: t });
 
         // Delete items and their payments
@@ -717,7 +755,7 @@ router.delete('/:id/sites/:siteId', async (req, res) => {
         const siteId = parseInt(req.params.siteId);
         const currentSiteIds = sheet.SelectedSiteIds || [];
         const updatedSiteIds = currentSiteIds.filter(id => id != siteId);
-        
+
         await sheet.update({ SelectedSiteIds: updatedSiteIds }, { transaction: t });
 
         // Delete items and their payments
@@ -749,7 +787,7 @@ router.post('/:id/import-attendance', async (req, res) => {
         if (!weeklySheet) return res.status(404).json({ msg: 'Weekly sheet not found' });
 
         const weekDate = new Date(weeklySheet.WeekDate);
-        
+
         // Find matching attendance sheet (where weeklySheet.WeekDate falls between start and end)
         const { AttendanceSheet, AttendanceRecord, AttendanceMisc } = require('../models');
         const attendanceSheet = await AttendanceSheet.findOne({
@@ -765,6 +803,10 @@ router.post('/:id/import-attendance', async (req, res) => {
         const records = await AttendanceRecord.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
         const miscs = await AttendanceMisc.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
 
+        // Update WeeklyPaySheet's selected lists to include those found in attendance
+        const attendancePayeeIds = [...new Set(records.map(r => r.PayeeId).concat(miscs.map(m => m.PayeeId)))].filter(id => !!id).map(id => parseInt(id));
+        const attendanceSiteIds = [...new Set(records.map(r => r.SiteId).concat(miscs.map(m => m.SiteId).filter(Boolean)))].filter(id => !!id).map(id => parseInt(id));
+
         // Aggregate by PayeeId_SiteId
         const totals = {};
         records.forEach(r => {
@@ -772,19 +814,25 @@ router.post('/:id/import-attendance', async (req, res) => {
             totals[key] = (totals[key] || 0) + parseFloat(r.CalculatedAmount);
         });
         miscs.forEach(m => {
-            if (m.SiteId) {
-                const key = `${m.PayeeId}_${m.SiteId}`;
+            let sId = m.SiteId;
+            if (!sId) {
+                // Find first site this payee worked at this week
+                const payeeRec = records.find(r => r.PayeeId === m.PayeeId);
+                if (payeeRec) {
+                    sId = payeeRec.SiteId;
+                } else if (attendanceSiteIds.length > 0) {
+                    sId = attendanceSiteIds[0];
+                }
+            }
+            if (sId) {
+                const key = `${m.PayeeId}_${sId}`;
                 totals[key] = (totals[key] || 0) + parseFloat(m.Amount);
             }
         });
 
-        // Update WeeklyPaySheet's selected lists to include those found in attendance
-        const attendancePayeeIds = [...new Set(records.map(r => r.PayeeId).concat(miscs.map(m => m.PayeeId)))].filter(id => !!id).map(id => parseInt(id));
-        const attendanceSiteIds = [...new Set(records.map(r => r.SiteId).concat(miscs.filter(m => m.SiteId).map(m => m.SiteId)))].filter(id => !!id).map(id => parseInt(id));
-
         let currentPayees = (weeklySheet.SelectedPayeeIds || []).map(id => parseInt(id));
         let currentSites = (weeklySheet.SelectedSiteIds || []).map(id => parseInt(id));
-        
+
         let needsUpdate = false;
         attendancePayeeIds.forEach(id => { if (!currentPayees.includes(id)) { currentPayees.push(id); needsUpdate = true; } });
         attendanceSiteIds.forEach(id => { if (!currentSites.includes(id)) { currentSites.push(id); needsUpdate = true; } });
@@ -802,7 +850,7 @@ router.post('/:id/import-attendance', async (req, res) => {
             const [pIdStr, sIdStr] = key.split('_');
             const payeeId = parseInt(pIdStr);
             const siteId = sIdStr === 'null' ? null : parseInt(sIdStr);
-            
+
             let item = await WeeklyPaySheetItem.findOne({
                 where: { WeeklyPaySheetId: weeklySheet.id, PayeeId: payeeId, SiteId: siteId }
             });
@@ -833,4 +881,210 @@ router.post('/:id/import-attendance', async (req, res) => {
     }
 });
 
+
+// ============ SKIP / SPLIT / EXTRA PAYMENT ============
+
+// Helper: find or create next week's sheet
+async function findOrCreateNextWeekSheet(currentSheet, transaction) {
+    const currentDate = new Date(currentSheet.WeekDate);
+    const nextDate = new Date(currentDate);
+    nextDate.setDate(nextDate.getDate() + 7);
+    const nextWeekDate = nextDate.toISOString().split('T')[0];
+
+    let nextSheet = await WeeklyPaySheet.findOne({
+        where: { WeekDate: nextWeekDate },
+        transaction
+    });
+
+    if (!nextSheet) {
+        // Auto-create next week's sheet with same payees/sites
+        nextSheet = await WeeklyPaySheet.create({
+            Title: `Week of ${nextWeekDate}`,
+            WeekDate: nextWeekDate,
+            Status: 'Open',
+            SelectedPayeeIds: currentSheet.SelectedPayeeIds || [],
+            SelectedSiteIds: currentSheet.SelectedSiteIds || []
+        }, { transaction });
+    }
+
+    return nextSheet;
+}
+
+// @route   POST /api/weekly-pay-sheets/items/:id/skip
+// @desc    Full skip — mark item as skipped, move full amount to next week
+router.post('/items/:id/skip', async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const item = await WeeklyPaySheetItem.findByPk(req.params.id, { transaction: t });
+        if (!item) { await t.rollback(); return res.status(404).json({ msg: 'Item not found' }); }
+        if (item.PaymentStatus === 'Paid') { await t.rollback(); return res.status(400).json({ msg: 'Cannot skip a paid item' }); }
+
+        const currentSheet = await WeeklyPaySheet.findByPk(item.WeeklyPaySheetId, { transaction: t });
+        if (!currentSheet) { await t.rollback(); return res.status(404).json({ msg: 'Sheet not found' }); }
+
+        const nextSheet = await findOrCreateNextWeekSheet(currentSheet, t);
+
+        // Check if item already exists in next sheet for same payee+site
+        let nextItem = await WeeklyPaySheetItem.findOne({
+            where: {
+                WeeklyPaySheetId: nextSheet.id,
+                PayeeId: item.PayeeId,
+                SiteId: item.SiteId,
+                IsExtraPayment: false,
+                IsSkipped: false
+            },
+            transaction: t
+        });
+
+        if (nextItem) {
+            await nextItem.update({
+                Amount: parseFloat(nextItem.Amount) + parseFloat(item.Amount)
+            }, { transaction: t });
+        } else {
+            await WeeklyPaySheetItem.create({
+                WeeklyPaySheetId: nextSheet.id,
+                PayeeId: item.PayeeId,
+                SiteId: item.SiteId,
+                Amount: item.Amount,
+                PaymentStatus: 'Pending'
+            }, { transaction: t });
+        }
+
+        // Mark current item as skipped (don't delete, keep for visibility)
+        await item.update({
+            IsSkipped: true,
+            SkippedToSheetId: nextSheet.id
+        }, { transaction: t });
+
+        await t.commit();
+        res.json({ msg: 'Item skipped to next week', nextSheetId: nextSheet.id });
+    } catch (err) {
+        await t.rollback();
+        console.error('Skip Error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   POST /api/weekly-pay-sheets/items/:id/split-pay
+// @desc    Pay partial amount, move remainder to next week
+router.post('/items/:id/split-pay', async (req, res) => {
+    const { PaidAmount, PaymentDate, PaymentMode, Notes } = req.body;
+    const t = await sequelize.transaction();
+    try {
+        const item = await WeeklyPaySheetItem.findByPk(req.params.id, {
+            include: [
+                { model: Payee, as: 'Payee' },
+                { model: Site, as: 'Site' }
+            ],
+            transaction: t
+        });
+        if (!item) { await t.rollback(); return res.status(404).json({ msg: 'Item not found' }); }
+        if (item.PaymentStatus === 'Paid') { await t.rollback(); return res.status(400).json({ msg: 'Item already paid' }); }
+
+        const totalAmount = parseFloat(item.Amount);
+        const paidAmount = parseFloat(PaidAmount);
+        const remainderAmount = totalAmount - paidAmount;
+
+        if (paidAmount <= 0 || paidAmount >= totalAmount) {
+            await t.rollback();
+            return res.status(400).json({ msg: 'Partial amount must be between 0 and total amount' });
+        }
+
+        const currentSheet = await WeeklyPaySheet.findByPk(item.WeeklyPaySheetId, { transaction: t });
+        if (!currentSheet) { await t.rollback(); return res.status(404).json({ msg: 'Sheet not found' }); }
+
+        // Create payment for the paid portion
+        const payment = await Payment.create({
+            PaymentCategory: item.PayeeId ? (item.Payee?.Type === 'Labour' ? 'Labour' : 'Material') : 'Collection',
+            SiteId: item.SiteId,
+            PayeeId: item.PayeeId,
+            Amount: paidAmount,
+            PaymentMode: PaymentMode || 'Cash',
+            Notes: Notes || `Partial payment - ${item.Payee?.Name || 'Payee'}`,
+            PaymentDate: PaymentDate || new Date()
+        }, { transaction: t });
+
+        // Update current item to the paid amount and mark as paid
+        await item.update({
+            Amount: paidAmount,
+            PaymentStatus: 'Paid',
+            PaymentId: payment.id,
+            PaymentDate: PaymentDate || new Date(),
+            PaymentMode: PaymentMode || 'Cash',
+            PaymentNotes: Notes || `Partial: ₹${paidAmount} of ₹${totalAmount}`
+        }, { transaction: t });
+
+        // Move remainder to next week
+        const nextSheet = await findOrCreateNextWeekSheet(currentSheet, t);
+
+        let nextItem = await WeeklyPaySheetItem.findOne({
+            where: {
+                WeeklyPaySheetId: nextSheet.id,
+                PayeeId: item.PayeeId,
+                SiteId: item.SiteId,
+                IsExtraPayment: false,
+                IsSkipped: false
+            },
+            transaction: t
+        });
+
+        if (nextItem) {
+            await nextItem.update({
+                Amount: parseFloat(nextItem.Amount) + remainderAmount
+            }, { transaction: t });
+        } else {
+            await WeeklyPaySheetItem.create({
+                WeeklyPaySheetId: nextSheet.id,
+                PayeeId: item.PayeeId,
+                SiteId: item.SiteId,
+                Amount: remainderAmount,
+                PaymentStatus: 'Pending'
+            }, { transaction: t });
+        }
+
+        await t.commit();
+        res.json({
+            msg: `Paid ₹${paidAmount}. Remaining ₹${remainderAmount} moved to next week.`,
+            nextSheetId: nextSheet.id
+        });
+    } catch (err) {
+        await t.rollback();
+        console.error('Split Pay Error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   POST /api/weekly-pay-sheets/:id/extra-payment
+// @desc    Add an extra payment (client-billable additional cost)
+router.post('/:id/extra-payment', async (req, res) => {
+    const { SiteId, Amount, Description, PaymentDate } = req.body;
+    const t = await sequelize.transaction();
+    try {
+        const sheet = await WeeklyPaySheet.findByPk(req.params.id, { transaction: t });
+        if (!sheet) { await t.rollback(); return res.status(404).json({ msg: 'Sheet not found' }); }
+
+        // Create extra payment item — auto-paid as cash
+        const item = await WeeklyPaySheetItem.create({
+            WeeklyPaySheetId: sheet.id,
+            PayeeId: null, // Not linked to a payee
+            SiteId: parseInt(SiteId),
+            Amount: parseFloat(Amount),
+            PaymentStatus: 'Paid',
+            PaymentDate: PaymentDate || new Date(),
+            PaymentMode: 'Cash',
+            PaymentNotes: Description || 'Extra payment',
+            IsExtraPayment: true,
+            ExtraPaymentDescription: Description || 'Additional works'
+        }, { transaction: t });
+
+        await t.commit();
+        res.json({ msg: 'Extra payment added', item });
+    } catch (err) {
+        await t.rollback();
+        console.error('Extra Payment Error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
 module.exports = router;
+

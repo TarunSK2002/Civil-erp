@@ -46,6 +46,24 @@ const WeeklyPaySheetItem = sequelize.define('WeeklyPaySheetItem', {
         type: DataTypes.STRING(500),
         allowNull: true
     },
+    IsSkipped: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+    },
+    SkippedToSheetId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    IsExtraPayment: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+    },
+    ExtraPaymentDescription: {
+        type: DataTypes.STRING(255),
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

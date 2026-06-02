@@ -645,6 +645,18 @@
   min-width: 70px;
 }
 
+.aps-shift-row .shift-person-type {
+  font-size: 10px;
+  font-weight: 700;
+  color: #00BCD4;
+  background: rgba(0, 188, 212, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
 .aps-shift-row .shift-count {
   font-size: 12px;
   font-weight: 600;
@@ -678,6 +690,7 @@
 /* ---- Add Shift Form ---- */
 .aps-add-shift {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
   align-items: flex-end;
@@ -730,6 +743,7 @@
   transition: all 0.2s;
   gap: 4px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .aps-add-shift-btn:hover {

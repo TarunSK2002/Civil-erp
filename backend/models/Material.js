@@ -12,6 +12,22 @@ const Material = sequelize.define('Material', {
         type: DataTypes.STRING(100),
         allowNull: false
     },
+    DealerName: {
+        type: DataTypes.STRING(100),
+        defaultValue: ''
+    },
+    MobileNo: {
+        type: DataTypes.STRING(15),
+        defaultValue: ''
+    },
+    AccountNo: {
+        type: DataTypes.STRING(30),
+        defaultValue: ''
+    },
+    MaterialTypeId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

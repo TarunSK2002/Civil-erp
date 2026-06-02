@@ -1,11 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Trash2, Package, Home, Calendar, Loader2, ShoppingCart, Ruler, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Package, Home, Loader2, ShoppingCart, Edit2, IndianRupee } from 'lucide-react';
 import api from '../api/axios';
+
+const UNITS = [
+  'nos', 'unit', 'kg', 'litr', 'running feet', 'ton', 'bill',
+  'cu ft', 'sq ft', 'cu m', 'sq m', 'meter', 'running meter', 'box',
+  'PVC door', 'PVC Window', 'UPVC door', 'UPVC window',
+  'Aluminium door', 'aluminium window', 'steel door', 'steel window',
+  'wpc door', 'teekwood door', 'flush door', 'mahakani door',
+  'wood Ventilator', 'upvc ventilator'
+];
 
 const MaterialPurchasePage = () => {
   const [purchases, setPurchases] = useState([]);
   const [sites, setSites] = useState([]);
   const [materials, setMaterials] = useState([]);
+  const [materialTypes, setMaterialTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Form State (for adding)
@@ -15,7 +25,7 @@ const MaterialPurchasePage = () => {
     SiteId: '',
     MaterialId: '',
     Quantity: '',
-    Unit: 'Units',
+    Unit: 'nos',
     Amount: '',
     DealerName: '',
     PurchaseDate: new Date().toISOString().split('T')[0]
@@ -28,6 +38,18 @@ const MaterialPurchasePage = () => {
     fetchPurchases();
     fetchDropdowns();
   }, []);
+
+  // Auto-calculate amount when material, quantity, unit, materials, or materialTypes change
+  useEffect(() => {
+    if (!formData.MaterialId || !formData.Quantity) return;
+    const matType = materialTypes.find(t => String(t.id) === String(formData.MaterialId));
+    if (matType && parseFloat(matType.Price) > 0) {
+      const computed = parseFloat(matType.Price) * parseFloat(formData.Quantity || 0);
+      setFormData(prev => ({ ...prev, Amount: computed.toFixed(2) }));
+    }
+  }, [formData.MaterialId, formData.Quantity, formData.Unit, materialTypes]);
+
+
 
   const fetchPurchases = async () => {
     try {
@@ -42,12 +64,14 @@ const MaterialPurchasePage = () => {
 
   const fetchDropdowns = async () => {
     try {
-      const [sitesRes, materialsRes] = await Promise.all([
+      const [sitesRes, materialsRes, typesRes] = await Promise.all([
         api.get('/sites'),
-        api.get('/materials')
+        api.get('/materials'),
+        api.get('/material-types')
       ]);
       setSites(sitesRes.data);
       setMaterials(materialsRes.data);
+      setMaterialTypes(typesRes.data);
     } catch (err) {
       console.error('Failed to fetch dropdown data', err);
     }
@@ -89,7 +113,7 @@ const MaterialPurchasePage = () => {
       SiteId: '',
       MaterialId: '',
       Quantity: '',
-      Unit: 'Units',
+      Unit: 'nos',
       Amount: '',
       DealerName: '',
       PurchaseDate: new Date().toISOString().split('T')[0]
@@ -106,6 +130,8 @@ const MaterialPurchasePage = () => {
       }
     }
   };
+
+
 
   return (
     <div className="data-page" style={{ padding: '24px' }}>
@@ -125,7 +151,8 @@ const MaterialPurchasePage = () => {
             fontWeight: '600',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '8px',
+            cursor: 'pointer'
           }}
         >
           <ShoppingCart size={20} /> Record New Purchase
@@ -148,9 +175,9 @@ const MaterialPurchasePage = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
+              <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
             ) : purchases.length === 0 ? (
-              <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No purchase records found</td></tr>
+              <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No purchase records found</td></tr>
             ) : purchases.map(p => (
               <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '16px', fontSize: '13px' }}>
@@ -178,10 +205,10 @@ const MaterialPurchasePage = () => {
                   ₹{parseFloat(p.Amount || 0).toLocaleString('en-IN')}
                 </td>
                 <td style={{ padding: '16px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                  <button onClick={() => handleEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--accent)' }}>
+                  <button onClick={() => handleEdit(p)} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}>
                     <Edit2 size={18} />
                   </button>
-                  <button onClick={() => handleDelete(p.id)} style={{ background: 'none', border: 'none', color: 'var(--error)' }}>
+                  <button onClick={() => handleDelete(p.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer' }}>
                     <Trash2 size={18} />
                   </button>
                 </td>
@@ -191,10 +218,10 @@ const MaterialPurchasePage = () => {
         </table>
       </div>
 
-      {/* Add Modal */}
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: '16px', width: '500px', border: '1px solid var(--border)' }} className="fade-in">
+          <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: '16px', width: '520px', border: '1px solid var(--border)', maxHeight: '90vh', overflowY: 'auto' }} className="fade-in">
             <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '24px' }}>{editingId ? 'Edit Purchase Record' : 'Record Purchase'}</h2>
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: '16px' }}>
@@ -214,13 +241,33 @@ const MaterialPurchasePage = () => {
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Material</label>
                 <select 
                   value={formData.MaterialId}
-                  onChange={(e) => setFormData({...formData, MaterialId: e.target.value})}
+                  onChange={(e) => {
+                    const typeId = e.target.value;
+                    const matType = materialTypes.find(t => String(t.id) === String(typeId));
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      MaterialId: typeId, 
+                      Unit: matType?.DefaultUnit || 'nos' 
+                    }));
+                  }}
                   required
                   style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', outline: 'none' }}
                 >
                   <option value="">Select Material</option>
-                  {materials.map(m => <option key={m.id} value={m.id}>{m.Name}</option>)}
+                  {materialTypes.map(m => <option key={m.id} value={m.id}>{m.Name}</option>)}
                 </select>
+                {(() => {
+                  const selectedMatType = materialTypes.find(t => String(t.id) === String(formData.MaterialId));
+                  if (selectedMatType && selectedMatType.Price > 0) {
+                    return (
+                      <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(124,77,255,0.08)', borderRadius: 6, fontSize: 12, color: '#7C4DFF', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <IndianRupee size={12} />
+                        Rate: ₹{parseFloat(selectedMatType.Price).toLocaleString('en-IN')} per {selectedMatType.DefaultUnit || 'nos'} — Amount will be auto-calculated
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
@@ -236,13 +283,13 @@ const MaterialPurchasePage = () => {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>Unit</label>
-                  <input 
-                    type="text" 
+                  <select
                     value={formData.Unit}
                     onChange={(e) => setFormData({...formData, Unit: e.target.value})}
-                    placeholder="e.g. Bags, Units"
                     style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', outline: 'none' }}
-                  />
+                  >
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -286,8 +333,8 @@ const MaterialPurchasePage = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'none', color: 'var(--text-primary)' }}>Cancel</button>
-                <button type="submit" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--accent)', color: '#0F0F1A', fontWeight: 'bold' }}>
+                <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--accent)', color: '#0F0F1A', fontWeight: 'bold', cursor: 'pointer' }}>
                   {editingId ? 'Update Record' : 'Record Purchase'}
                 </button>
               </div>

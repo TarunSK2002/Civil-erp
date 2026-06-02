@@ -38,6 +38,10 @@ const WeeklyPaySheetPage = () => {
     PaymentMode: 'Cash',
     Notes: ''
   });
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitAmount, setSplitAmount] = useState('');
+  const [showExtraPaymentModal, setShowExtraPaymentModal] = useState(false);
+  const [extraPayForm, setExtraPayForm] = useState({ SiteId: '', Amount: '', Description: '' });
 
   // New sheet form
   const [newSheetForm, setNewSheetForm] = useState({
@@ -185,6 +189,19 @@ const WeeklyPaySheetPage = () => {
     }
   };
 
+  const handleCloseWeek = async () => {
+    if (!selectedSheetId) return;
+    if (!window.confirm("Are you sure you want to CLOSE this weekly sheet? Closing the sheet will calculate weekly profits/losses, snapshot it to Petty Cash ledger, and lock the sheet from edits. This cannot be undone.")) return;
+    try {
+      const res = await api.post(`/petty-cash/close-week/${selectedSheetId}`);
+      alert(res.data.msg);
+      fetchSheetData(selectedSheetId);
+      fetchSheets();
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to close week');
+    }
+  };
+
   // ---- Add Payees/Sites ----
   const handleAddPayees = async () => {
     if (!selectedSheetId) return;
@@ -217,6 +234,7 @@ const WeeklyPaySheetPage = () => {
   };
 
   const handleRemovePayee = async (payeeId) => {
+    if (sheetData?.sheet?.Status === 'Closed') return;
     if (!window.confirm('Remove this payee and all their recorded amounts from this sheet?')) return;
     try {
       await api.delete(`/weekly-pay-sheets/${selectedSheetId}/payees/${payeeId}`);
@@ -228,6 +246,7 @@ const WeeklyPaySheetPage = () => {
   };
 
   const handleRemoveSite = async (siteId) => {
+    if (sheetData?.sheet?.Status === 'Closed') return;
     if (!window.confirm('Remove this site column and all its recorded amounts from this sheet?')) return;
     try {
       await api.delete(`/weekly-pay-sheets/${selectedSheetId}/sites/${siteId}`);
@@ -240,6 +259,7 @@ const WeeklyPaySheetPage = () => {
 
   // ---- Cell Operations ----
   const handleCellClick = (payeeId, siteId) => {
+    if (sheetData?.sheet?.Status === 'Closed') return; // Read-only
     const key = payeeId ? `${payeeId}_${siteId}` : `income_${siteId}`;
     const cellData = sheetData?.grid?.[key];
     if (cellData?.status === 'Paid') return; // Don't edit paid cells
@@ -248,6 +268,7 @@ const WeeklyPaySheetPage = () => {
   };
 
   const handleCellSave = async (payeeId, siteId) => {
+    if (sheetData?.sheet?.Status === 'Closed') return;
     const amount = parseFloat(editValue) || 0;
     setEditingCell(null);
 
@@ -264,6 +285,7 @@ const WeeklyPaySheetPage = () => {
   };
 
   const handleCellKeyDown = (e, payeeId, siteId) => {
+    if (sheetData?.sheet?.Status === 'Closed') return;
     if (e.key === 'Enter') {
       handleCellSave(payeeId, siteId);
     } else if (e.key === 'Escape') {
@@ -323,12 +345,72 @@ const WeeklyPaySheetPage = () => {
     }
   };
 
+  const handleSkipItem = async (itemId) => {
+    if (!window.confirm('Skip this payment to next week? The full amount will be carried over.')) return;
+    try {
+      await api.post(`/weekly-pay-sheets/items/${itemId}/skip`);
+      setShowPayModal(null);
+      fetchSheetData(selectedSheetId);
+      fetchSheets();
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to skip');
+    }
+  };
+
+  const handleSplitPay = async (itemId) => {
+    const amt = parseFloat(splitAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert('Please enter a valid partial amount');
+      return;
+    }
+    try {
+      await api.post(`/weekly-pay-sheets/items/${itemId}/split-pay`, {
+        PaidAmount: amt,
+        PaymentDate: payFormData.PaymentDate,
+        PaymentMode: payFormData.PaymentMode,
+        Notes: payFormData.Notes
+      });
+      setShowPayModal(null);
+      setSplitMode(false);
+      setSplitAmount('');
+      setPayFormData({ PaymentDate: new Date().toISOString().split('T')[0], PaymentMode: 'Cash', Notes: '' });
+      fetchSheetData(selectedSheetId);
+      fetchSheets();
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to process split payment');
+    }
+  };
+
+  const handleAddExtraPayment = async (e) => {
+    e.preventDefault();
+    if (!extraPayForm.SiteId || !extraPayForm.Amount || parseFloat(extraPayForm.Amount) <= 0) {
+      alert('Please select a site and enter a valid amount');
+      return;
+    }
+    try {
+      await api.post(`/weekly-pay-sheets/${selectedSheetId}/extra-payment`, {
+        SiteId: parseInt(extraPayForm.SiteId),
+        Amount: parseFloat(extraPayForm.Amount),
+        Description: extraPayForm.Description
+      });
+      setShowExtraPaymentModal(false);
+      setExtraPayForm({ SiteId: '', Amount: '', Description: '' });
+      fetchSheetData(selectedSheetId);
+      fetchSheets();
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to add extra payment');
+    }
+  };
+
   // ---- Computed Values ----
   const getRowTotal = (payeeId) => {
     if (!sheetData?.grid || !sheetData?.sites) return 0;
     return sheetData.sites.reduce((sum, site) => {
       const key = `${payeeId}_${site.id}`;
-      return sum + (sheetData.grid[key]?.amount || 0);
+      const cell = sheetData.grid[key];
+      // Exclude skipped items from row total
+      if (cell?.isSkipped) return sum;
+      return sum + (cell?.amount || 0);
     }, 0);
   };
 
@@ -336,7 +418,10 @@ const WeeklyPaySheetPage = () => {
     if (!sheetData?.grid || !sheetData?.payees) return 0;
     return sheetData.payees.reduce((sum, payee) => {
       const key = `${payee.id}_${siteId}`;
-      return sum + (sheetData.grid[key]?.amount || 0);
+      const cell = sheetData.grid[key];
+      // Exclude skipped items from col total
+      if (cell?.isSkipped) return sum;
+      return sum + (cell?.amount || 0);
     }, 0);
   };
 
@@ -449,28 +534,56 @@ const WeeklyPaySheetPage = () => {
 
         {selectedSheetId && (
           <>
-            {sheetData && getPendingTotal() > 0 && (
-              <button className="wps-btn wps-btn-success wps-btn-sm" onClick={() => setShowPayModal('all')} style={{ background: '#4CAF50', color: 'white' }}>
-                <CheckCircle2 size={14} /> Pay All
-              </button>
+            {sheetData?.sheet?.Status === 'Closed' ? (
+              <span style={{
+                background: 'rgba(244, 67, 54, 0.12)',
+                color: '#F44336',
+                border: '1px solid rgba(244, 67, 54, 0.25)',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                🔒 Archived (Closed)
+              </span>
+            ) : (
+              <>
+                {sheetData && getPendingTotal() > 0 && (
+                  <button className="wps-btn wps-btn-success wps-btn-sm" onClick={() => setShowPayModal('all')} style={{ background: '#4CAF50', color: 'white' }}>
+                    <CheckCircle2 size={14} /> Pay All
+                  </button>
+                )}
+                <button className="wps-btn wps-btn-secondary wps-btn-sm" onClick={() => setShowAddPayeeModal(true)}>
+                  <Users size={14} /> Add Payees
+                </button>
+                <button className="wps-btn wps-btn-secondary wps-btn-sm" onClick={() => setShowAddSiteModal(true)}>
+                  <Building2 size={14} /> Add Sites
+                </button>
+                <button 
+                  className="wps-btn wps-btn-sm" 
+                  onClick={handleImportAttendance} 
+                  disabled={importing}
+                  style={{ background: 'rgba(0,188,212,0.1)', color: '#00BCD4', border: '1px solid rgba(0,188,212,0.2)' }}
+                >
+                  <Users size={14} /> {importing ? '...' : 'Import'}
+                </button>
+                <button 
+                  className="wps-btn wps-btn-sm"
+                  onClick={handleCloseWeek}
+                  style={{ background: 'rgba(255, 152, 0, 0.15)', color: '#FF9800', border: '1px solid rgba(255, 152, 0, 0.3)' }}
+                >
+                  🔒 Close Week
+                </button>
+                <button className="wps-btn wps-btn-danger wps-btn-sm" onClick={handleDeleteSheet}>
+                  <Trash2 size={14} />
+                </button>
+              </>
             )}
-            <button className="wps-btn wps-btn-secondary wps-btn-sm" onClick={() => setShowAddPayeeModal(true)}>
-              <Users size={14} /> Add Payees
-            </button>
-            <button className="wps-btn wps-btn-secondary wps-btn-sm" onClick={() => setShowAddSiteModal(true)}>
-              <Building2 size={14} /> Add Sites
-            </button>
-            <button 
-              className="wps-btn wps-btn-sm" 
-              onClick={handleImportAttendance} 
-              disabled={importing}
-              style={{ background: 'rgba(0,188,212,0.1)', color: '#00BCD4', border: '1px solid rgba(0,188,212,0.2)' }}
-            >
-              <Users size={14} /> {importing ? '...' : 'Import'}
-            </button>
-            <button className="wps-btn wps-btn-danger wps-btn-sm" onClick={handleDeleteSheet}>
-              <Trash2 size={14} />
-            </button>
           </>
         )}
 
@@ -546,8 +659,10 @@ const WeeklyPaySheetPage = () => {
                       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', width: '100%' }}>
                         <span className="wps-site-name">{site.SiteName}</span>
                       </div>
-                      {site.SiteValue > 0 && (
-                        <span className="wps-site-value">₹{parseFloat(site.SiteValue).toLocaleString('en-IN')}</span>
+                      {site.Client && (
+                        <span className="wps-site-value" style={{ color: '#00BCD4', fontSize: '10px' }}>
+                          {site.Client.Name}
+                        </span>
                       )}
                     </div>
                   </th>
@@ -581,6 +696,7 @@ const WeeklyPaySheetPage = () => {
                     const isEditing = editingCell === key;
                     const amt = cellData?.amount || 0;
                     const isPaid = cellData?.status === 'Paid';
+                    const isSkipped = cellData?.isSkipped;
 
                     return (
                       <td key={site.id}>
@@ -596,26 +712,47 @@ const WeeklyPaySheetPage = () => {
                           />
                         ) : (
                           <div
-                            className={`wps-cell ${amt > 0 ? (isPaid ? 'paid' : 'pending has-value') : 'empty'}`}
-                            onClick={() => handleCellClick(payee.id, site.id)}
+                            className={`wps-cell ${amt > 0 ? (isPaid ? 'paid' : (isSkipped ? 'skipped' : 'pending has-value')) : 'empty'}`}
+                            onClick={() => !isSkipped && handleCellClick(payee.id, site.id)}
+                            style={isSkipped ? {
+                              background: 'rgba(255, 152, 0, 0.08)',
+                              border: '1px dashed rgba(255, 152, 0, 0.4)',
+                              color: '#FF9800',
+                              fontSize: '11px',
+                              cursor: 'not-allowed',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              minHeight: '38px'
+                            } : undefined}
                           >
-                            {amt > 0 && (
-                              <button
-                                className={`wps-status-btn ${isPaid ? 'paid' : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (isPaid) {
-                                    handleUnpay(cellData.id);
-                                  } else {
-                                    setShowPayModal(key);
-                                  }
-                                }}
-                                title={isPaid ? 'Click to unpay' : 'Click to mark paid'}
-                              >
-                                {isPaid && <Check size={12} />}
-                              </button>
+                            {isSkipped ? (
+                              <>
+                                <span style={{ fontWeight: 700 }}>SKIPPED</span>
+                                <span style={{ fontSize: 9 }}>{fmt(amt)}</span>
+                              </>
+                            ) : (
+                              <>
+                                {amt > 0 && (
+                                  <button
+                                    className={`wps-status-btn ${isPaid ? 'paid' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isPaid) {
+                                        handleUnpay(cellData.id);
+                                      } else {
+                                        setShowPayModal(key);
+                                      }
+                                    }}
+                                    title={isPaid ? 'Click to unpay' : 'Click to mark paid'}
+                                  >
+                                    {isPaid && <Check size={12} />}
+                                  </button>
+                                )}
+                                <span>{fmt(amt)}</span>
+                              </>
                             )}
-                            <span>{fmt(amt)}</span>
                           </div>
                         )}
                       </td>
@@ -627,13 +764,74 @@ const WeeklyPaySheetPage = () => {
                 </tr>
               ))}
 
-              {/* TOTAL Row */}
+              {/* EXTRA BILLABLES Row */}
+              <tr className="wps-extra-row" style={{ background: 'rgba(76, 175, 80, 0.05)' }}>
+                <td style={{ fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px' }}>
+                    <span>EXTRA BILLABLES</span>
+                    <button
+                      className="wps-btn wps-btn-xs"
+                      style={{ padding: '2px 6px', fontSize: 10, background: '#4CAF50', color: 'white', borderRadius: 4, border: 'none', cursor: 'pointer' }}
+                      onClick={() => {
+                        setExtraPayForm({ SiteId: '', Amount: '', Description: '' });
+                        setShowExtraPaymentModal(true);
+                      }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </td>
+                {sheetData.sites.map(site => {
+                  const siteExtra = sheetData.extraPaymentData?.[site.id];
+                  const totalExtra = siteExtra?.total || 0;
+                  return (
+                    <td key={site.id} style={{ cursor: 'pointer' }} onClick={() => {
+                      setExtraPayForm({ SiteId: String(site.id), Amount: '', Description: '' });
+                      setShowExtraPaymentModal(true);
+                    }}>
+                      <div className="wps-cell" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '38px' }}>
+                        <span style={{ fontWeight: 700, color: totalExtra > 0 ? '#4CAF50' : 'var(--text-muted)' }}>
+                          {fmt(totalExtra)}
+                        </span>
+                        {siteExtra?.items?.length > 0 && (
+                          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                            ({siteExtra.items.length} items)
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+                <td>
+                  {fmt(sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0), 0))}
+                </td>
+              </tr>
+
+              {/* SITE TOTAL (EXPENSES) Row */}
               <tr className="wps-total-row">
                 <td>SITE TOTAL (EXPENSES)</td>
+                {sheetData.sites.map(site => {
+                  const totalExpense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
+                  return (
+                    <td key={site.id}>{fmt(totalExpense)}</td>
+                  );
+                })}
+                <td>
+                  {fmt(getGrandTotal() + sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0), 0))}
+                </td>
+              </tr>
+
+              {/* QUOTED AMOUNT (SITE TOTAL VALUE) Row */}
+              <tr className="wps-quoted-row" style={{ background: 'rgba(0, 188, 212, 0.05)', borderTop: '2px solid rgba(0, 188, 212, 0.2)' }}>
+                <td style={{ fontWeight: 700, color: '#00BCD4' }}>TOTAL SITE QUOTED VALUE</td>
                 {sheetData.sites.map(site => (
-                  <td key={site.id}>{fmt(getColTotal(site.id))}</td>
+                  <td key={site.id} style={{ fontWeight: 700, color: '#00BCD4' }}>
+                    {fmt(site.SiteValue)}
+                  </td>
                 ))}
-                <td>{fmt(getGrandTotal())}</td>
+                <td style={{ fontWeight: 700, color: '#00BCD4' }}>
+                  {fmt(sheetData.sites.reduce((sum, site) => sum + parseFloat(site.SiteValue || 0), 0))}
+                </td>
               </tr>
 
               {/* INCOME PAYMENT Row */}
@@ -663,6 +861,7 @@ const WeeklyPaySheetPage = () => {
                         <div
                           className={`wps-cell ${displayAmt > 0 ? (isPending ? 'pending has-value' : 'paid') : 'empty'}`}
                           onClick={() => handleCellClick(null, site.id)}
+                          style={{ minHeight: '38px' }}
                         >
                           {isPending && (
                             <button
@@ -709,11 +908,16 @@ const WeeklyPaySheetPage = () => {
                   const key = `income_${site.id}`;
                   const cellData = sheetData.grid?.[key];
                   const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
-                  const income = (sheetData.incomeData?.[site.id] || 0) + pending;
+                  
+                  // Cumulative income up to this week's end date
+                  const cumulativeCollected = sheetData.cumulativeIncomeData?.[site.id] || 0;
+                  const projectedCumulativeIncome = cumulativeCollected + pending;
+                  
                   const siteValue = parseFloat(site.SiteValue) || 0;
-                  const balance = income - siteValue;
+                  const balance = siteValue - projectedCumulativeIncome;
+                  
                   return (
-                    <td key={site.id} style={{ color: balance >= 0 ? '#4CAF50' : '#f44336' }}>
+                    <td key={site.id} style={{ color: balance <= 0 ? '#4CAF50' : '#FF9800' }}>
                       {fmt(balance)}
                     </td>
                   );
@@ -723,9 +927,10 @@ const WeeklyPaySheetPage = () => {
                      const key = `income_${site.id}`;
                      const cellData = sheetData.grid?.[key];
                      const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
-                     const income = (sheetData.incomeData?.[site.id] || 0) + pending;
+                     const cumulativeCollected = sheetData.cumulativeIncomeData?.[site.id] || 0;
+                     const projectedCumulativeIncome = cumulativeCollected + pending;
                      const siteValue = parseFloat(site.SiteValue) || 0;
-                     return sum + (income - siteValue);
+                     return sum + (siteValue - projectedCumulativeIncome);
                    }, 0))}
                 </td>
               </tr>
@@ -738,7 +943,7 @@ const WeeklyPaySheetPage = () => {
                   const cellData = sheetData.grid?.[key];
                   const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
                   const income = (sheetData.incomeData?.[site.id] || 0) + pending;
-                  const expense = getColTotal(site.id);
+                  const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
                   const tally = income - expense;
                   return (
                     <td key={site.id} style={{ color: tally >= 0 ? '#4CAF50' : '#f44336' }}>
@@ -752,7 +957,7 @@ const WeeklyPaySheetPage = () => {
                     const cellData = sheetData.grid?.[key];
                     const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
                     const income = (sheetData.incomeData?.[site.id] || 0) + pending;
-                    const expense = getColTotal(site.id);
+                    const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
                     return sum + (income - expense);
                   }, 0))}
                 </td>
@@ -935,9 +1140,9 @@ const WeeklyPaySheetPage = () => {
 
       {/* Mark as Paid Modal */}
       {showPayModal && (
-        <div className="wps-modal-overlay" onClick={() => setShowPayModal(null)}>
+        <div className="wps-modal-overlay" onClick={() => { setShowPayModal(null); setSplitMode(false); setSplitAmount(''); }}>
           <div className="wps-modal" onClick={e => e.stopPropagation()}>
-            <h2>Mark as Paid</h2>
+            <h2>{splitMode ? 'Partial Payment' : 'Confirm Payment'}</h2>
             {(() => {
               if (showPayModal === 'all') {
                 return (
@@ -995,6 +1200,37 @@ const WeeklyPaySheetPage = () => {
                 </>
               );
             })()}
+
+            {/* Split Pay option for single payee cells */}
+            {showPayModal !== 'all' && !showPayModal.startsWith('income_') && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={splitMode}
+                    onChange={(e) => {
+                      setSplitMode(e.target.checked);
+                      if (!e.target.checked) setSplitAmount('');
+                    }}
+                    style={{ width: 'auto', margin: 0 }}
+                  />
+                  Split Payment / Pay Partial Amount
+                </label>
+              </div>
+            )}
+
+            {splitMode && (
+              <div className="wps-modal-field">
+                <label>Amount to Pay Now (₹)</label>
+                <input
+                  type="number"
+                  placeholder="Enter partial amount"
+                  value={splitAmount}
+                  onChange={e => setSplitAmount(e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="wps-modal-field">
               <label>Payment Date</label>
               <input
@@ -1026,12 +1262,94 @@ const WeeklyPaySheetPage = () => {
                 style={{ resize: 'none' }}
               />
             </div>
-            <div className="wps-modal-actions">
-              <button className="wps-btn wps-btn-secondary" onClick={() => setShowPayModal(null)}>Cancel</button>
-              <button className="wps-btn wps-btn-success" onClick={handleMarkPaid}>
-                <Check size={16} /> Confirm Payment
-              </button>
+            <div className="wps-modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                {/* Skip button on the left for non-all payee pending payments */}
+                {showPayModal !== 'all' && !showPayModal.startsWith('income_') && (
+                  <button
+                    className="wps-btn wps-btn-warning"
+                    type="button"
+                    onClick={() => {
+                      const cellData = sheetData?.grid?.[showPayModal];
+                      if (cellData) handleSkipItem(cellData.id);
+                    }}
+                    style={{ background: '#FF9800', color: 'white' }}
+                  >
+                    SKIP
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="wps-btn wps-btn-secondary" onClick={() => { setShowPayModal(null); setSplitMode(false); setSplitAmount(''); }}>Cancel</button>
+                {splitMode ? (
+                  <button
+                    className="wps-btn wps-btn-success"
+                    onClick={() => {
+                      const cellData = sheetData?.grid?.[showPayModal];
+                      if (cellData) handleSplitPay(cellData.id);
+                    }}
+                  >
+                    Split & Pay
+                  </button>
+                ) : (
+                  <button className="wps-btn wps-btn-success" onClick={handleMarkPaid}>
+                    <Check size={16} /> Confirm Payment
+                  </button>
+                )}
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extra Payment Modal */}
+      {showExtraPaymentModal && (
+        <div className="wps-modal-overlay" onClick={() => setShowExtraPaymentModal(false)}>
+          <div className="wps-modal" onClick={e => e.stopPropagation()}>
+            <h2>Add Extra Payment</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
+              Add a client-billable extra cost for the selected site (e.g. additional works, materials bought outside quotation).
+            </p>
+            <form onSubmit={handleAddExtraPayment}>
+              <div className="wps-modal-field">
+                <label>Select Site</label>
+                <select
+                  value={extraPayForm.SiteId}
+                  onChange={e => setExtraPayForm({ ...extraPayForm, SiteId: e.target.value })}
+                  required
+                >
+                  <option value="">— Select Site —</option>
+                  {sheetData?.sites?.map(s => (
+                    <option key={s.id} value={s.id}>{s.SiteName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="wps-modal-field">
+                <label>Amount (₹)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 5000"
+                  value={extraPayForm.Amount}
+                  onChange={e => setExtraPayForm({ ...extraPayForm, Amount: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="wps-modal-field">
+                <label>Description / Work Details</label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Centering extra wood work, tiles extra design charges"
+                  value={extraPayForm.Description}
+                  onChange={e => setExtraPayForm({ ...extraPayForm, Description: e.target.value })}
+                  style={{ resize: 'none' }}
+                  required
+                />
+              </div>
+              <div className="wps-modal-actions">
+                <button type="button" className="wps-btn wps-btn-secondary" onClick={() => setShowExtraPaymentModal(false)}>Cancel</button>
+                <button type="submit" className="wps-btn wps-btn-primary">Add Extra Payment</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

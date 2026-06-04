@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, sequelize } = require('../models');
+const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, SiteMaterial, MaterialType, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // ============ SHEET CRUD ============
@@ -192,6 +192,44 @@ router.get('/:id', async (req, res) => {
             cumulativeIncomeData[c.SiteId] = (cumulativeIncomeData[c.SiteId] || 0) + parseFloat(c.Amount || 0);
         });
 
+        // Fetch material purchases (from site_materials) for this week's date range
+        const materialPurchases = await SiteMaterial.findAll({
+            where: {
+                SiteId: { [Op.in]: selectedSiteIds },
+                PurchaseDate: {
+                    [Op.between]: [weekStartDate, weekEndDate]
+                }
+            },
+            include: [{ model: MaterialType, as: 'Material', attributes: ['Name'] }],
+            order: [['PurchaseDate', 'ASC']]
+        });
+
+        // Build materialData: { [siteId]: { gross, discount, net, items: [...] } }
+        const materialData = {};
+        materialPurchases.forEach(p => {
+            const siteId = p.SiteId;
+            if (!materialData[siteId]) {
+                materialData[siteId] = { gross: 0, discount: 0, net: 0, items: [] };
+            }
+            const gross = parseFloat(p.Amount || 0);
+            const disc = parseFloat(p.Discount || 0);
+            const net = Math.max(0, gross - disc);
+            materialData[siteId].gross += gross;
+            materialData[siteId].discount += disc;
+            materialData[siteId].net += net;
+            materialData[siteId].items.push({
+                id: p.id,
+                materialName: p.Material?.Name || 'Unknown Material',
+                dealerName: p.DealerName || '—',
+                quantity: p.Quantity,
+                unit: p.Unit,
+                gross,
+                discount: disc,
+                net,
+                purchaseDate: p.PurchaseDate
+            });
+        });
+
         res.json({
             id: sheet.id,
             Title: sheet.Title,
@@ -204,6 +242,7 @@ router.get('/:id', async (req, res) => {
             incomeData,
             cumulativeIncomeData,
             extraPaymentData,
+            materialData,
             selectedPayeeIds,
             selectedSiteIds
         });

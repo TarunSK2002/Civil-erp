@@ -29,6 +29,11 @@ const SiteMaterial = sequelize.define('SiteMaterial', {
         allowNull: false,
         defaultValue: 0
     },
+    Discount: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0
+    },
     DealerName: {
         type: DataTypes.STRING(100),
         allowNull: true,

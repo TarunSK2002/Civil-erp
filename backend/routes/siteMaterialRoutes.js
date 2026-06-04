@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
 // @route   POST api/site-materials
 // @desc    Add a material purchase for a site
 router.post('/', async (req, res) => {
-    const { SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, DealerName } = req.body;
+    const { SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, Discount, DealerName } = req.body;
     try {
         const newPurchase = await SiteMaterial.create({
             SiteId,
@@ -31,6 +31,7 @@ router.post('/', async (req, res) => {
             Quantity,
             Unit,
             Amount: Amount || 0,
+            Discount: Discount || 0,
             DealerName: DealerName || '',
             PurchaseDate: PurchaseDate || new Date()
         });
@@ -44,7 +45,7 @@ router.post('/', async (req, res) => {
 // @route   PUT api/site-materials/:id
 // @desc    Update a material purchase record
 router.put('/:id', async (req, res) => {
-    const { SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, DealerName } = req.body;
+    const { SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, Discount, DealerName } = req.body;
     try {
         const record = await SiteMaterial.findByPk(req.params.id);
         if (!record) return res.status(404).json({ msg: 'Record not found' });
@@ -55,6 +56,7 @@ router.put('/:id', async (req, res) => {
             Quantity,
             Unit,
             Amount: Amount || 0,
+            Discount: Discount !== undefined ? parseFloat(Discount) : parseFloat(record.Discount || 0),
             DealerName: DealerName || '',
             PurchaseDate: PurchaseDate || new Date()
         });
@@ -62,6 +64,33 @@ router.put('/:id', async (req, res) => {
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
+    }
+});
+
+// @route   PATCH api/site-materials/:id/discount
+// @desc    Update only the Discount field (called from Weekly Pay Sheet popup at payment time)
+router.patch('/:id/discount', async (req, res) => {
+    const { Discount } = req.body;
+    try {
+        const record = await SiteMaterial.findByPk(req.params.id);
+        if (!record) return res.status(404).json({ msg: 'Record not found' });
+
+        const discountVal = parseFloat(Discount) || 0;
+        if (discountVal < 0) return res.status(400).json({ msg: 'Discount cannot be negative' });
+        if (discountVal > parseFloat(record.Amount)) {
+            return res.status(400).json({ msg: 'Discount cannot exceed the billed amount' });
+        }
+
+        await record.update({ Discount: discountVal });
+        res.json({
+            id: record.id,
+            Amount: parseFloat(record.Amount),
+            Discount: discountVal,
+            NetAmount: parseFloat(record.Amount) - discountVal
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ msg: 'Server Error' });
     }
 });
 

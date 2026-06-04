@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Table2, ChevronDown, Check, X, Loader2, Trash2,
   Calendar, CreditCard, FileSpreadsheet, Users, Building2,
-  IndianRupee, Clock, CheckCircle2, AlertCircle
+  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, Tag
 } from 'lucide-react';
 import api from '../api/axios';
 import './WeeklyPaySheetPage.css';
@@ -42,6 +42,11 @@ const WeeklyPaySheetPage = () => {
   const [splitAmount, setSplitAmount] = useState('');
   const [showExtraPaymentModal, setShowExtraPaymentModal] = useState(false);
   const [extraPayForm, setExtraPayForm] = useState({ SiteId: '', Amount: '', Description: '' });
+
+  // Material Discount Popup
+  const [materialPopup, setMaterialPopup] = useState(null); // { siteId, siteName }
+  const [materialDiscounts, setMaterialDiscounts] = useState({}); // { [itemId]: discountValue }
+  const [savingDiscounts, setSavingDiscounts] = useState(false);
 
   // New sheet form
   const [newSheetForm, setNewSheetForm] = useState({
@@ -439,6 +444,46 @@ const WeeklyPaySheetPage = () => {
 
   const getPendingTotal = () => getGrandTotal() - getPaidTotal();
 
+  // ---- Material Helpers ----
+  const getMaterialNet = (siteId) => sheetData?.materialData?.[siteId]?.net || 0;
+  const getMaterialGross = (siteId) => sheetData?.materialData?.[siteId]?.gross || 0;
+  const getMaterialDiscount = (siteId) => sheetData?.materialData?.[siteId]?.discount || 0;
+  const getTotalMaterialNet = () =>
+    (sheetData?.sites || []).reduce((sum, s) => sum + getMaterialNet(s.id), 0);
+  const getTotalMaterialGross = () =>
+    (sheetData?.sites || []).reduce((sum, s) => sum + getMaterialGross(s.id), 0);
+  const getTotalMaterialDiscount = () =>
+    (sheetData?.sites || []).reduce((sum, s) => sum + getMaterialDiscount(s.id), 0);
+
+  // ---- Material Discount Save ----
+  const openMaterialPopup = (siteId, siteName) => {
+    if (sheetData?.sheet?.Status === 'Closed') return;
+    const items = sheetData?.materialData?.[siteId]?.items || [];
+    if (items.length === 0) return;
+    // Pre-fill discount inputs with existing values
+    const initDiscounts = {};
+    items.forEach(it => { initDiscounts[it.id] = it.discount; });
+    setMaterialDiscounts(initDiscounts);
+    setMaterialPopup({ siteId, siteName });
+  };
+
+  const handleSaveDiscounts = async () => {
+    setSavingDiscounts(true);
+    try {
+      const updates = Object.entries(materialDiscounts).map(([itemId, discount]) =>
+        api.patch(`/site-materials/${itemId}/discount`, { Discount: parseFloat(discount) || 0 })
+      );
+      await Promise.all(updates);
+      setMaterialPopup(null);
+      setMaterialDiscounts({});
+      fetchSheetData(selectedSheetId);
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to save discounts');
+    } finally {
+      setSavingDiscounts(false);
+    }
+  };
+
   // ---- Filter payees ----
   const getFilteredPayees = () => {
     if (!sheetData?.payees) return [];
@@ -496,7 +541,7 @@ const WeeklyPaySheetPage = () => {
       {sheetData && (
         <div className="wps-summary">
           <div className="wps-summary-card total">
-            <div className="wps-summary-label">Total Amount</div>
+            <div className="wps-summary-label">Payee Total</div>
             <div className="wps-summary-value">{fmt(getGrandTotal())}</div>
           </div>
           <div className="wps-summary-card paid">
@@ -512,6 +557,17 @@ const WeeklyPaySheetPage = () => {
             <div className="wps-summary-value">
               {sheetData.sites?.length || 0} × {sheetData.payees?.length || 0}
             </div>
+          </div>
+          <div className="wps-summary-card material">
+            <div className="wps-summary-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Package size={12} /> Material Cost
+            </div>
+            <div className="wps-summary-value" style={{ color: '#9C27B0' }}>{fmt(getTotalMaterialNet()) || '—'}</div>
+            {getTotalMaterialDiscount() > 0 && (
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>
+                Gross {fmt(getTotalMaterialGross())} · Saved {fmt(getTotalMaterialDiscount())}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -807,17 +863,56 @@ const WeeklyPaySheetPage = () => {
                 </td>
               </tr>
 
+              {/* MATERIAL PURCHASES Row */}
+              <tr className="wps-material-row">
+                <td style={{ fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px' }}>
+                    <Package size={14} color="#9C27B0" />
+                    <span style={{ color: '#9C27B0' }}>MATERIAL PURCHASES</span>
+                  </div>
+                </td>
+                {sheetData.sites.map(site => {
+                  const matNet = getMaterialNet(site.id);
+                  const matDiscount = getMaterialDiscount(site.id);
+                  const matItems = sheetData.materialData?.[site.id]?.items || [];
+                  const isClosed = sheetData?.sheet?.Status === 'Closed';
+                  return (
+                    <td key={site.id}>
+                      <div
+                        className={`wps-material-cell ${matItems.length > 0 && !isClosed ? 'clickable' : ''}`}
+                        onClick={() => matItems.length > 0 && !isClosed && openMaterialPopup(site.id, site.SiteName)}
+                        title={matItems.length > 0 ? (isClosed ? `${matItems.length} item(s)` : 'Click to view/edit discounts') : ''}
+                      >
+                        {matNet > 0 ? (
+                          <>
+                            <span className="wps-material-net">{fmt(matNet)}</span>
+                            {matDiscount > 0 && (
+                              <span className="wps-material-discount-badge">-{fmt(matDiscount)}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+                <td style={{ fontWeight: 700, color: '#9C27B0' }}>
+                  {fmt(getTotalMaterialNet())}
+                </td>
+              </tr>
+
               {/* SITE TOTAL (EXPENSES) Row */}
               <tr className="wps-total-row">
                 <td>SITE TOTAL (EXPENSES)</td>
                 {sheetData.sites.map(site => {
-                  const totalExpense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
+                  const totalExpense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id);
                   return (
                     <td key={site.id}>{fmt(totalExpense)}</td>
                   );
                 })}
                 <td>
-                  {fmt(getGrandTotal() + sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0), 0))}
+                  {fmt(getGrandTotal() + sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id), 0))}
                 </td>
               </tr>
 
@@ -943,7 +1038,7 @@ const WeeklyPaySheetPage = () => {
                   const cellData = sheetData.grid?.[key];
                   const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
                   const income = (sheetData.incomeData?.[site.id] || 0) + pending;
-                  const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
+                  const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id);
                   const tally = income - expense;
                   return (
                     <td key={site.id} style={{ color: tally >= 0 ? '#4CAF50' : '#f44336' }}>
@@ -957,7 +1052,7 @@ const WeeklyPaySheetPage = () => {
                     const cellData = sheetData.grid?.[key];
                     const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
                     const income = (sheetData.incomeData?.[site.id] || 0) + pending;
-                    const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
+                    const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id);
                     return sum + (income - expense);
                   }, 0))}
                 </td>
@@ -967,6 +1062,119 @@ const WeeklyPaySheetPage = () => {
           </table>
         </div>
       )}
+
+      {/* ==================== MATERIAL DISCOUNT POPUP ==================== */}
+      {materialPopup && (() => {
+        const { siteId, siteName } = materialPopup;
+        const items = sheetData?.materialData?.[siteId]?.items || [];
+        const totalGross = items.reduce((s, it) => s + it.gross, 0);
+        const totalDiscount = items.reduce((s, it) => s + (parseFloat(materialDiscounts[it.id]) || 0), 0);
+        const totalNet = Math.max(0, totalGross - totalDiscount);
+        return (
+          <div className="wps-modal-overlay" onClick={() => setMaterialPopup(null)}>
+            <div className="wps-material-popup" onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Package size={18} color="#9C27B0" />
+                  <h3 style={{ margin: 0, fontSize: 16 }}>Materials — {siteName}</h3>
+                </div>
+                <button onClick={() => setMaterialPopup(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                <Tag size={11} style={{ marginRight: 4 }} />
+                Enter any negotiated discount per item. Net amount will flow into the weekly sheet totals.
+              </p>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th style={{ padding: '8px 6px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600 }}>Material</th>
+                      <th style={{ padding: '8px 6px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600 }}>Dealer</th>
+                      <th style={{ padding: '8px 6px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>Bill (₹)</th>
+                      <th style={{ padding: '8px 6px', textAlign: 'center', color: '#FF9800', fontWeight: 600 }}>Discount (₹)</th>
+                      <th style={{ padding: '8px 6px', textAlign: 'right', color: '#9C27B0', fontWeight: 600 }}>Net (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map(item => {
+                      const disc = parseFloat(materialDiscounts[item.id]) || 0;
+                      const net = Math.max(0, item.gross - disc);
+                      const isOver = disc > item.gross;
+                      return (
+                        <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                          <td style={{ padding: '10px 6px' }}>
+                            <div style={{ fontWeight: 600 }}>{item.materialName}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.quantity} {item.unit}</div>
+                          </td>
+                          <td style={{ padding: '10px 6px', color: 'var(--text-secondary)', fontSize: 12 }}>{item.dealerName}</td>
+                          <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 500 }}>₹{item.gross.toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '10px 6px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.gross}
+                              value={materialDiscounts[item.id] ?? 0}
+                              onChange={e => setMaterialDiscounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              style={{
+                                width: '100%',
+                                backgroundColor: 'var(--bg-input)',
+                                border: `1px solid ${isOver ? '#f44336' : 'rgba(255,152,0,0.4)'}`,
+                                borderRadius: 6,
+                                padding: '6px 8px',
+                                color: isOver ? '#f44336' : '#FF9800',
+                                textAlign: 'right',
+                                outline: 'none',
+                                fontSize: 13
+                              }}
+                            />
+                            {isOver && <div style={{ fontSize: 10, color: '#f44336', marginTop: 2 }}>Exceeds bill amount!</div>}
+                          </td>
+                          <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, color: '#9C27B0' }}>
+                            ₹{net.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid rgba(156,39,176,0.25)', background: 'rgba(156,39,176,0.05)' }}>
+                      <td colSpan={2} style={{ padding: '10px 6px', fontWeight: 700 }}>TOTAL</td>
+                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700 }}>₹{totalGross.toLocaleString('en-IN')}</td>
+                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, color: '#FF9800' }}>
+                        {totalDiscount > 0 ? `-₹${totalDiscount.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 800, color: '#9C27B0', fontSize: 15 }}>
+                        ₹{totalNet.toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+                <button
+                  onClick={() => setMaterialPopup(null)}
+                  style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveDiscounts}
+                  disabled={savingDiscounts}
+                  style={{ flex: 2, padding: '10px', borderRadius: 8, border: 'none', background: '#9C27B0', color: 'white', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                >
+                  {savingDiscounts ? <Loader2 size={16} className="wps-spinner" /> : <Check size={16} />}
+                  {savingDiscounts ? 'Saving...' : 'Save Discounts'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ==================== MODALS ==================== */}
 

@@ -40,7 +40,7 @@
 /* ---- Summary Cards ---- */
 .wps-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 20px;
   flex-shrink: 0;
@@ -68,6 +68,7 @@
 .wps-summary-card.paid::before { background: linear-gradient(90deg, #4CAF50, #2E7D32); }
 .wps-summary-card.pending::before { background: linear-gradient(90deg, #FF9800, #F57C00); }
 .wps-summary-card.sites::before { background: linear-gradient(90deg, #2196F3, #1565C0); }
+.wps-summary-card.material::before { background: linear-gradient(90deg, #9C27B0, #6A1B9A); }
 
 .wps-summary-label {
   font-size: 11px;
@@ -849,3 +850,99 @@
   background: rgba(255, 152, 0, 0.25) !important;
 }
 
+/* ---- Material Purchases Row ---- */
+.wps-grid tbody tr.wps-material-row {
+  background: rgba(156, 39, 176, 0.04) !important;
+}
+
+.wps-grid tbody tr.wps-material-row td {
+  border-top: 1px solid rgba(156, 39, 176, 0.15);
+  border-bottom: none;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.wps-grid tbody tr.wps-material-row td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  background-color: #1e1828 !important;
+  border-right: 2px solid rgba(156, 39, 176, 0.2);
+  letter-spacing: 0.5px;
+}
+
+.wps-grid tbody tr.wps-material-row td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 25;
+  background-color: #1e1828 !important;
+  border-left: 2px solid rgba(156, 39, 176, 0.2);
+  color: #9C27B0;
+  font-weight: 800;
+}
+
+/* ---- Material Cell (clickable) ---- */
+.wps-material-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  min-height: 38px;
+  transition: background 0.15s;
+}
+
+.wps-material-cell.clickable {
+  cursor: pointer;
+}
+
+.wps-material-cell.clickable:hover {
+  background: rgba(156, 39, 176, 0.12);
+}
+
+.wps-material-net {
+  font-weight: 700;
+  color: #9C27B0;
+  font-size: 13px;
+}
+
+.wps-material-discount-badge {
+  font-size: 10px;
+  color: #FF9800;
+  font-weight: 600;
+}
+
+/* ---- Material Discount Popup ---- */
+.wps-material-popup {
+  background: var(--bg-card);
+  border: 1px solid rgba(156, 39, 176, 0.3);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 540px;
+  max-width: 680px;
+  width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.2s ease;
+}
+
+.wps-material-popup h3 {
+  color: var(--text-primary);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1200px) {
+  .wps-summary {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .wps-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

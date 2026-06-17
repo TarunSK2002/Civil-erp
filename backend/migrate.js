@@ -85,6 +85,27 @@ async function migrate() {
             console.log('Rate column already dropped or does not exist in materials');
         } else throw e;
     }
+
+    try {
+        await seq.query("ALTER TABLE site_materials DROP FOREIGN KEY site_materials_ibfk_14");
+        console.log('Dropped incorrect site_materials_ibfk_14 foreign key');
+    } catch(e) {
+        // Silently skip if it doesn't exist
+    }
+
+    try {
+        await seq.query("ALTER TABLE site_materials DROP FOREIGN KEY site_materials_ibfk_6");
+        console.log('Dropped incorrect site_materials_ibfk_6 foreign key');
+    } catch(e) {
+        // Silently skip if it doesn't exist
+    }
+
+    try {
+        await seq.query("ALTER TABLE site_materials ADD CONSTRAINT fk_site_materials_material_type FOREIGN KEY (MaterialId) REFERENCES material_types (Id) ON DELETE CASCADE ON UPDATE CASCADE");
+        console.log('Added correct fk_site_materials_material_type foreign key');
+    } catch(e) {
+        // Silently skip if already exists
+    }
     
     console.log('Migration complete');
     process.exit(0);

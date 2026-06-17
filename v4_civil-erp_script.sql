@@ -1,4 +1,4 @@
--- MySQL dump 10.13  Distrib 8.0.45, for Win64 (x86_64)
+﻿-- MySQL dump 10.13  Distrib 8.0.45, for Win64 (x86_64)
 --
 -- Host: localhost    Database: jeeva_construction
 -- ------------------------------------------------------
@@ -30,6 +30,29 @@ CREATE TABLE `__efmigrationshistory` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `action_logs`
+--
+
+DROP TABLE IF EXISTS `action_logs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `action_logs` (
+  `Id` int NOT NULL AUTO_INCREMENT,
+  `WeeklyPaySheetId` int NOT NULL,
+  `ActionType` varchar(50) NOT NULL,
+  `EntityType` varchar(30) NOT NULL,
+  `EntityId` int DEFAULT NULL,
+  `BeforeData` json DEFAULT NULL,
+  `AfterData` json DEFAULT NULL,
+  `CreatedAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  `IsUndone` tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`Id`),
+  KEY `idx_action_logs_sheet` (`WeeklyPaySheetId`),
+  KEY `idx_action_logs_created` (`CreatedAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `attendance_miscs`
 --
 
@@ -51,7 +74,7 @@ CREATE TABLE `attendance_miscs` (
   CONSTRAINT `attendance_miscs_ibfk_3` FOREIGN KEY (`AttendanceSheetId`) REFERENCES `attendance_sheets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_miscs_ibfk_4` FOREIGN KEY (`PayeeId`) REFERENCES `payees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_miscs_SiteId_foreign_idx` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -74,6 +97,8 @@ CREATE TABLE `attendance_records` (
   `CalculatedAmount` decimal(18,2) NOT NULL DEFAULT '0.00',
   `CreatedAt` datetime DEFAULT NULL,
   `PersonType` varchar(30) NOT NULL DEFAULT 'Mason',
+  `SectionId` int DEFAULT NULL,
+  `ProjectId` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `AttendanceSheetId` (`AttendanceSheetId`),
   KEY `PayeeId` (`PayeeId`),
@@ -81,7 +106,7 @@ CREATE TABLE `attendance_records` (
   CONSTRAINT `attendance_records_ibfk_1` FOREIGN KEY (`AttendanceSheetId`) REFERENCES `attendance_sheets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_records_ibfk_2` FOREIGN KEY (`PayeeId`) REFERENCES `payees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_records_ibfk_3` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -101,7 +126,7 @@ CREATE TABLE `attendance_sheets` (
   `SelectedSiteIds` text,
   `CreatedAt` datetime DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -156,7 +181,7 @@ CREATE TABLE `master_settings` (
   `UpdatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`Id`),
   UNIQUE KEY `SettingKey` (`SettingKey`)
-) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=90 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -174,6 +199,7 @@ CREATE TABLE `material_types` (
   `CreatedAt` datetime DEFAULT NULL,
   `Price` decimal(18,2) NOT NULL DEFAULT '0.00',
   `DefaultUnit` varchar(50) DEFAULT 'nos',
+  `CalculationMode` varchar(30) DEFAULT 'Manual',
   PRIMARY KEY (`Id`),
   UNIQUE KEY `Name` (`Name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -306,7 +332,7 @@ CREATE TABLE `petty_cash_transactions` (
   PRIMARY KEY (`Id`),
   KEY `WeeklyPaySheetId` (`WeeklyPaySheetId`),
   CONSTRAINT `petty_cash_transactions_ibfk_1` FOREIGN KEY (`WeeklyPaySheetId`) REFERENCES `weekly_pay_sheets` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -341,13 +367,64 @@ CREATE TABLE `site_materials` (
   `Unit` varchar(30) NOT NULL,
   `PurchaseDate` datetime DEFAULT NULL,
   `Amount` decimal(18,2) NOT NULL DEFAULT '0.00',
+  `Discount` decimal(18,2) NOT NULL DEFAULT '0.00',
   `DealerName` varchar(100) DEFAULT '',
+  `Length` decimal(10,2) DEFAULT NULL,
+  `Breadth` decimal(10,2) DEFAULT NULL,
+  `SqFt` decimal(12,2) DEFAULT NULL,
+  `WastagePercent` decimal(5,2) DEFAULT '0.00',
+  `RatePerUnit` decimal(18,2) DEFAULT '0.00',
+  `CalculationMode` varchar(30) DEFAULT 'Manual',
+  `SectionId` int DEFAULT NULL,
+  `ProjectId` int DEFAULT NULL,
   PRIMARY KEY (`Id`),
   KEY `IX_site_materials_MaterialId` (`MaterialId`),
   KEY `IX_site_materials_SiteId` (`SiteId`),
-  CONSTRAINT `site_materials_ibfk_13` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_site_materials_material_type` FOREIGN KEY (`MaterialId`) REFERENCES `material_types` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=883 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `site_materials_ibfk_13` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=887 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `site_projects`
+--
+
+DROP TABLE IF EXISTS `site_projects`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `site_projects` (
+  `Id` int NOT NULL AUTO_INCREMENT,
+  `SiteId` int NOT NULL,
+  `ProjectName` varchar(200) NOT NULL,
+  `WorkType` varchar(100) DEFAULT 'New Construction',
+  `StartDate` date DEFAULT NULL,
+  `EndDate` date DEFAULT NULL,
+  `Status` varchar(30) DEFAULT 'In Progress',
+  `QuotedValue` decimal(18,2) DEFAULT '0.00',
+  `Notes` varchar(500) DEFAULT NULL,
+  `CreatedAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Id`),
+  KEY `SiteId` (`SiteId`),
+  CONSTRAINT `site_projects_ibfk_1` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `site_sections`
+--
+
+DROP TABLE IF EXISTS `site_sections`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `site_sections` (
+  `Id` int NOT NULL AUTO_INCREMENT,
+  `SiteId` int NOT NULL,
+  `Name` varchar(100) NOT NULL,
+  `SortOrder` int DEFAULT '0',
+  `CreatedAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Id`),
+  KEY `SiteId` (`SiteId`),
+  CONSTRAINT `site_sections_ibfk_1` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -445,6 +522,9 @@ CREATE TABLE `weekly_pay_sheet_items` (
   `SkippedToSheetId` int DEFAULT NULL,
   `IsExtraPayment` tinyint(1) NOT NULL DEFAULT '0',
   `ExtraPaymentDescription` varchar(255) DEFAULT NULL,
+  `SourceType` varchar(30) DEFAULT 'Attendance',
+  `SourceMaterialIds` text,
+  `ProjectId` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `WeeklyPaySheetId` (`WeeklyPaySheetId`),
   KEY `PayeeId` (`PayeeId`),
@@ -454,7 +534,7 @@ CREATE TABLE `weekly_pay_sheet_items` (
   CONSTRAINT `weekly_pay_sheet_items_ibfk_2` FOREIGN KEY (`PayeeId`) REFERENCES `payees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `weekly_pay_sheet_items_ibfk_3` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `weekly_pay_sheet_items_ibfk_4` FOREIGN KEY (`PaymentId`) REFERENCES `payments` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3527 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3534 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -473,7 +553,7 @@ CREATE TABLE `weekly_pay_sheets` (
   `SelectedPayeeIds` text,
   `SelectedSiteIds` text,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=188 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=191 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -485,4 +565,4 @@ CREATE TABLE `weekly_pay_sheets` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-06-02  6:51:08
+-- Dump completed on 2026-06-17 14:02:22

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { SiteWorkValue, Site, Payment, Labour, SiteMaterial, Material, MaterialType, Payee, sequelize } = require('../models');
+const { SiteWorkValue, Site, Client, Payment, Labour, SiteMaterial, Material, MaterialType, Payee, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // =============================================
@@ -111,13 +111,78 @@ router.get('/site/:siteId', async (req, res) => {
             where: { SiteId: siteId }
         }) || 0;
 
+        // Received amount from client (Collection payments)
+        const receivedAmount = await Payment.sum('Amount', {
+            where: { SiteId: siteId, PaymentCategory: 'Collection' }
+        }) || 0;
+
         res.json({
             workItems,
             siteValue: siteTotalValue,
             labourExpense,
             materialExpense,
             totalExpenses: labourExpense + materialExpense,
-            profit: siteTotalValue - (labourExpense + materialExpense)
+            profit: siteTotalValue - (labourExpense + materialExpense),
+            receivedAmount,
+            balanceAmount: siteTotalValue - receivedAmount
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET api/reports/site/:siteId/client-payments
+// @desc    Get all Collection payments for a site (payment report)
+router.get('/site/:siteId/client-payments', async (req, res) => {
+    try {
+        const siteId = parseInt(req.params.siteId);
+        const { fromDate, toDate } = req.query;
+
+        const where = {
+            SiteId: siteId,
+            PaymentCategory: 'Collection'
+        };
+
+        // Date filter
+        if (fromDate || toDate) {
+            where.PaymentDate = {};
+            if (fromDate) where.PaymentDate[Op.gte] = new Date(fromDate);
+            if (toDate) {
+                const endDate = new Date(toDate);
+                endDate.setHours(23, 59, 59, 999);
+                where.PaymentDate[Op.lte] = endDate;
+            }
+        }
+
+        const payments = await Payment.findAll({
+            where,
+            include: [
+                { model: Site, as: 'Site', attributes: ['SiteName'], include: [{ model: Client, as: 'Client', attributes: ['Name'] }] }
+            ],
+            order: [['PaymentDate', 'DESC']]
+        });
+
+        const totalReceived = payments.reduce((sum, p) => sum + (parseFloat(p.Amount) || 0), 0);
+
+        // Get site value for balance calculation
+        const site = await Site.findByPk(siteId);
+        const siteValue = site ? parseFloat(site.SiteValue || 0) : 0;
+
+        res.json({
+            payments: payments.map(p => ({
+                id: p.id,
+                date: p.PaymentDate,
+                amount: parseFloat(p.Amount) || 0,
+                mode: p.PaymentMode,
+                notes: p.Notes,
+                siteName: p.Site?.SiteName,
+                clientName: p.Site?.Client?.Name
+            })),
+            totalReceived,
+            siteValue,
+            balanceAmount: siteValue - totalReceived,
+            totalPayments: payments.length
         });
     } catch (err) {
         console.error(err.message);

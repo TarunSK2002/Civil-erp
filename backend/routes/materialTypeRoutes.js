@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
 
 // @route   POST /api/material-types
 router.post('/', async (req, res) => {
-    const { Name, Price, DefaultUnit } = req.body;
+    const { Name, Price, DefaultUnit, CalculationMode } = req.body;
     try {
         if (!Name || !Name.trim()) return res.status(400).json({ msg: 'Name is required' });
         const existing = await MaterialType.findOne({ where: { Name: Name.trim() } });
@@ -28,7 +28,8 @@ router.post('/', async (req, res) => {
             Name: Name.trim(), 
             SortOrder: maxOrder + 1,
             Price: parseFloat(Price) || 0,
-            DefaultUnit: DefaultUnit || 'nos'
+            DefaultUnit: DefaultUnit || 'nos',
+            CalculationMode: CalculationMode || 'Manual'
         });
         res.json(type);
     } catch (err) {
@@ -39,7 +40,7 @@ router.post('/', async (req, res) => {
 
 // @route   PUT /api/material-types/:id
 router.put('/:id', async (req, res) => {
-    const { Name, IsActive, Price, DefaultUnit } = req.body;
+    const { Name, IsActive, Price, DefaultUnit, CalculationMode } = req.body;
     try {
         const type = await MaterialType.findByPk(req.params.id);
         if (!type) return res.status(404).json({ msg: 'Material type not found' });
@@ -49,6 +50,7 @@ router.put('/:id', async (req, res) => {
         if (IsActive !== undefined) updates.IsActive = IsActive;
         if (Price !== undefined) updates.Price = parseFloat(Price) || 0;
         if (DefaultUnit !== undefined) updates.DefaultUnit = DefaultUnit;
+        if (CalculationMode !== undefined) updates.CalculationMode = CalculationMode;
         await type.update(updates);
         res.json(type);
     } catch (err) {

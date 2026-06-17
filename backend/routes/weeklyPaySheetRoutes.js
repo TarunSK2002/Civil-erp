@@ -1,7 +1,128 @@
 const express = require('express');
 const router = express.Router();
-const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, SiteMaterial, MaterialType, sequelize } = require('../models');
+const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, SiteMaterial, MaterialType, ActionLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
+
+// Helper: Synchronize dealer payee rows and grid items from site_materials
+async function syncDealerItems(sheet, transaction = null) {
+    const selectedSiteIds = sheet.SelectedSiteIds || [];
+    if (selectedSiteIds.length === 0) return;
+
+    // Calculate week range
+    const weekEndDate = new Date(sheet.WeekDate);
+    const weekStartDate = new Date(weekEndDate);
+    weekStartDate.setDate(weekEndDate.getDate() - 6);
+    weekStartDate.setHours(0, 0, 0, 0);
+    weekEndDate.setHours(23, 59, 59, 999);
+
+    // Fetch material purchases for this week
+    const purchases = await SiteMaterial.findAll({
+        where: {
+            SiteId: { [Op.in]: selectedSiteIds },
+            PurchaseDate: { [Op.between]: [weekStartDate, weekEndDate] }
+        },
+        transaction
+    });
+
+    // Group purchases by SiteId and DealerName (cleaned)
+    const groups = {};
+    for (const p of purchases) {
+        const dealer = (p.DealerName || '').trim();
+        if (!dealer) continue;
+        const siteId = p.SiteId;
+        const key = `${dealer.toLowerCase()}_${siteId}`;
+        if (!groups[key]) {
+            groups[key] = {
+                dealerName: dealer,
+                siteId,
+                netAmount: 0,
+                purchaseIds: []
+            };
+        }
+        groups[key].netAmount += parseFloat(p.Amount || 0) - parseFloat(p.Discount || 0);
+        groups[key].purchaseIds.push(p.id);
+    }
+
+    // Process each group: find/create Payee and update/create WeeklyPaySheetItem
+    const activeDealerPayeeIds = new Set();
+    
+    for (const key of Object.keys(groups)) {
+        const { dealerName, siteId, netAmount, purchaseIds } = groups[key];
+
+        // Find or create Payee of Type = 'Supplier' (case-insensitive)
+        let payee = await Payee.findOne({
+            where: sequelize.where(sequelize.fn('lower', sequelize.col('Name')), dealerName.toLowerCase()),
+            transaction
+        });
+
+        if (!payee) {
+            payee = await Payee.create({
+                Name: dealerName,
+                Type: 'Supplier'
+            }, { transaction });
+            console.log(`Auto-created Supplier Payee: ${dealerName} (${payee.id})`);
+        }
+
+        activeDealerPayeeIds.add(payee.id);
+
+        // Find or create WeeklyPaySheetItem for this sheet, payee, and site
+        let item = await WeeklyPaySheetItem.findOne({
+            where: {
+                WeeklyPaySheetId: sheet.id,
+                PayeeId: payee.id,
+                SiteId: siteId
+            },
+            transaction
+        });
+
+        if (item) {
+            // Update item if it's pending and not skipped
+            if (item.PaymentStatus === 'Pending' && !item.IsSkipped) {
+                await item.update({
+                    Amount: netAmount,
+                    SourceType: 'Material',
+                    SourceMaterialIds: JSON.stringify(purchaseIds)
+                }, { transaction });
+            } else {
+                // If it is paid or skipped, just update SourceType and SourceMaterialIds for tracking
+                await item.update({
+                    SourceType: 'Material',
+                    SourceMaterialIds: JSON.stringify(purchaseIds)
+                }, { transaction });
+            }
+        } else {
+            // Create a new item
+            await WeeklyPaySheetItem.create({
+                WeeklyPaySheetId: sheet.id,
+                PayeeId: payee.id,
+                SiteId: siteId,
+                Amount: netAmount,
+                SourceType: 'Material',
+                SourceMaterialIds: JSON.stringify(purchaseIds),
+                PaymentStatus: 'Pending'
+            }, { transaction });
+        }
+    }
+
+    // Find all WeeklyPaySheetItems of SourceType = 'Material' for this sheet.
+    // If they are not in our current groups, and they are Pending and not skipped, delete them.
+    const existingMaterialItems = await WeeklyPaySheetItem.findAll({
+        where: {
+            WeeklyPaySheetId: sheet.id,
+            SourceType: 'Material'
+        },
+        transaction
+    });
+
+    for (const item of existingMaterialItems) {
+        if (!activeDealerPayeeIds.has(item.PayeeId)) {
+            if (item.PaymentStatus === 'Pending' && !item.IsSkipped) {
+                await item.destroy({ transaction });
+            }
+        }
+    }
+}
+
 
 // ============ SHEET CRUD ============
 
@@ -79,7 +200,14 @@ router.post('/', async (req, res) => {
 // @desc    Get a sheet with all items (grid data)
 router.get('/:id', async (req, res) => {
     try {
-        const sheet = await WeeklyPaySheet.findByPk(req.params.id, {
+        let sheet = await WeeklyPaySheet.findByPk(req.params.id);
+        if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
+
+        // Auto-synchronize material dealer rows
+        await syncDealerItems(sheet);
+
+        // Re-fetch sheet to include newly created/updated dealer items
+        sheet = await WeeklyPaySheet.findByPk(req.params.id, {
             include: [{
                 model: WeeklyPaySheetItem,
                 as: 'Items',
@@ -90,18 +218,19 @@ router.get('/:id', async (req, res) => {
             }]
         });
 
-        if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
-
-        // Get payees and sites from the stored IDs (not just from items)
+        // Get payees and sites from the stored IDs and the actual item payees
         const selectedPayeeIds = sheet.SelectedPayeeIds || [];
         const selectedSiteIds = sheet.SelectedSiteIds || [];
+        
+        const itemPayeeIds = (sheet.Items || []).map(it => it.PayeeId).filter(id => id != null);
+        const allSheetPayeeIds = [...new Set([...selectedPayeeIds, ...itemPayeeIds])];
 
         let payees = [];
         let sites = [];
 
-        if (selectedPayeeIds.length > 0) {
+        if (allSheetPayeeIds.length > 0) {
             payees = await Payee.findAll({
-                where: { id: { [Op.in]: selectedPayeeIds } },
+                where: { id: { [Op.in]: allSheetPayeeIds } },
                 attributes: ['id', 'Name', 'Type'],
                 order: [['Name', 'ASC']]
             });
@@ -147,7 +276,9 @@ router.get('/:id', async (req, res) => {
                 paymentMode: item.PaymentMode,
                 paymentNotes: item.PaymentNotes,
                 isSkipped: item.IsSkipped || false,
-                skippedToSheetId: item.SkippedToSheetId
+                skippedToSheetId: item.SkippedToSheetId,
+                sourceType: item.SourceType || 'Attendance',
+                sourceMaterialIds: item.SourceMaterialIds
             };
         });
 
@@ -252,6 +383,21 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+// @route   POST /api/weekly-pay-sheets/:id/sync-dealer-items
+// @desc    Force sync dealer payee rows and grid items from site_materials
+router.post('/:id/sync-dealer-items', async (req, res) => {
+    try {
+        const sheet = await WeeklyPaySheet.findByPk(req.params.id);
+        if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
+
+        await syncDealerItems(sheet);
+        res.json({ msg: 'Dealer items synchronized successfully' });
+    } catch (err) {
+        console.error('Manual Dealer Sync Error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
 // @route   PUT /api/weekly-pay-sheets/:id
 // @desc    Update a sheet title/status
 router.put('/:id', async (req, res) => {
@@ -313,28 +459,49 @@ router.delete('/:id', async (req, res) => {
 // @desc    Add or update a cell item (upsert)
 router.post('/:id/items', async (req, res) => {
     const { PayeeId, SiteId, Amount } = req.body;
+    const t = await sequelize.transaction();
     try {
-        const sheet = await WeeklyPaySheet.findByPk(req.params.id);
-        if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
+        const sheet = await WeeklyPaySheet.findByPk(req.params.id, { transaction: t });
+        if (!sheet) {
+            await t.rollback();
+            return res.status(404).json({ msg: 'Sheet not found' });
+        }
 
         let item = await WeeklyPaySheetItem.findOne({
-            where: { WeeklyPaySheetId: req.params.id, PayeeId, SiteId }
+            where: { WeeklyPaySheetId: req.params.id, PayeeId, SiteId },
+            transaction: t
         });
+
+        const beforeAmount = item ? parseFloat(item.Amount || 0) : 0;
+        const targetAmount = parseFloat(Amount || 0);
 
         if (item) {
             if (item.PaymentStatus === 'Paid') {
+                await t.rollback();
                 return res.status(400).json({ msg: 'Cannot update amount for a paid item. Unpay first.' });
             }
-            await item.update({ Amount: Amount || 0 });
+            await item.update({ Amount: targetAmount }, { transaction: t });
         } else {
             item = await WeeklyPaySheetItem.create({
                 WeeklyPaySheetId: parseInt(req.params.id),
                 PayeeId: PayeeId || null,
                 SiteId,
-                Amount: Amount || 0,
+                Amount: targetAmount,
                 PaymentStatus: 'Pending'
-            });
+            }, { transaction: t });
         }
+
+        // Log cell edit action
+        await ActionLog.create({
+            WeeklyPaySheetId: sheet.id,
+            ActionType: 'CellEdit',
+            EntityType: 'WeeklyPaySheetItem',
+            EntityId: item.id,
+            BeforeData: { Amount: beforeAmount },
+            AfterData: { Amount: targetAmount }
+        }, { transaction: t });
+
+        await t.commit();
 
         item = await WeeklyPaySheetItem.findByPk(item.id, {
             include: [
@@ -345,6 +512,7 @@ router.post('/:id/items', async (req, res) => {
 
         res.json(item);
     } catch (err) {
+        await t.rollback();
         console.error(err.message);
         res.status(500).json({ msg: 'Server Error' });
     }
@@ -400,6 +568,9 @@ router.patch('/:id/pay-all', async (req, res) => {
             transaction: t
         });
 
+        const itemsBefore = items.map(it => ({ id: it.id, PaymentStatus: 'Pending', PaymentId: null }));
+        const itemsAfter = [];
+
         for (const item of items) {
             const payment = await Payment.create({
                 PaymentCategory: item.PayeeId ? (item.Payee?.Type === 'Labour' ? 'Labour' : 'Material') : 'Collection',
@@ -420,7 +591,19 @@ router.patch('/:id/pay-all', async (req, res) => {
                 PaymentMode: PaymentMode || 'Cash',
                 PaymentNotes: Notes || ''
             }, { transaction: t });
+
+            itemsAfter.push({ id: item.id, PaymentStatus: 'Paid', PaymentId: payment.id });
         }
+
+        // Log PayAll action
+        await ActionLog.create({
+            WeeklyPaySheetId: sheet.id,
+            ActionType: 'PayAll',
+            EntityType: 'WeeklyPaySheet',
+            EntityId: sheet.id,
+            BeforeData: { items: itemsBefore },
+            AfterData: { items: itemsAfter }
+        }, { transaction: t });
 
         await t.commit();
         res.json({ msg: `Successfully marked ${items.length} items as paid.` });
@@ -442,7 +625,8 @@ router.patch('/items/:id/pay', async (req, res) => {
             include: [
                 { model: Payee, as: 'Payee' },
                 { model: Site, as: 'Site' }
-            ]
+            ],
+            transaction: t
         });
         if (!item) {
             await t.rollback();
@@ -473,6 +657,23 @@ router.patch('/items/:id/pay', async (req, res) => {
             PaymentNotes: Notes || ''
         }, { transaction: t });
 
+        // Log Pay action
+        await ActionLog.create({
+            WeeklyPaySheetId: item.WeeklyPaySheetId,
+            ActionType: 'Pay',
+            EntityType: 'WeeklyPaySheetItem',
+            EntityId: item.id,
+            BeforeData: { PaymentStatus: 'Pending', PaymentId: null },
+            AfterData: {
+                PaymentStatus: 'Paid',
+                PaymentId: payment.id,
+                Amount: item.Amount,
+                PaymentMode: payment.PaymentMode,
+                PaymentNotes: payment.Notes,
+                PaymentDate: payment.PaymentDate
+            }
+        }, { transaction: t });
+
         await t.commit();
 
         const updated = await WeeklyPaySheetItem.findByPk(item.id, {
@@ -495,7 +696,7 @@ router.patch('/items/:id/pay', async (req, res) => {
 router.patch('/items/:id/unpay', async (req, res) => {
     const t = await sequelize.transaction();
     try {
-        const item = await WeeklyPaySheetItem.findByPk(req.params.id);
+        const item = await WeeklyPaySheetItem.findByPk(req.params.id, { transaction: t });
         if (!item) {
             await t.rollback();
             return res.status(404).json({ msg: 'Item not found' });
@@ -504,6 +705,19 @@ router.patch('/items/:id/unpay', async (req, res) => {
             await t.rollback();
             return res.status(400).json({ msg: 'Item is already pending' });
         }
+
+        const payment = item.PaymentId ? await Payment.findByPk(item.PaymentId, { transaction: t }) : null;
+        const beforeData = {
+            PaymentStatus: 'Paid',
+            PaymentId: item.PaymentId,
+            PaymentDate: item.PaymentDate,
+            PaymentMode: item.PaymentMode,
+            PaymentNotes: item.PaymentNotes,
+            PaymentAmount: payment ? payment.Amount : item.Amount,
+            PaymentCategory: payment ? payment.PaymentCategory : 'Labour',
+            SiteId: item.SiteId,
+            PayeeId: item.PayeeId
+        };
 
         if (item.PaymentId) {
             await Payment.destroy({ where: { id: item.PaymentId }, transaction: t });
@@ -515,6 +729,16 @@ router.patch('/items/:id/unpay', async (req, res) => {
             PaymentDate: null,
             PaymentMode: null,
             PaymentNotes: null
+        }, { transaction: t });
+
+        // Log Unpay action
+        await ActionLog.create({
+            WeeklyPaySheetId: item.WeeklyPaySheetId,
+            ActionType: 'Unpay',
+            EntityType: 'WeeklyPaySheetItem',
+            EntityId: item.id,
+            BeforeData: beforeData,
+            AfterData: { PaymentStatus: 'Pending', PaymentId: null }
         }, { transaction: t });
 
         await t.commit();
@@ -975,12 +1199,14 @@ router.post('/items/:id/skip', async (req, res) => {
             transaction: t
         });
 
+        const nextItemBeforeAmount = nextItem ? parseFloat(nextItem.Amount) : 0;
+
         if (nextItem) {
             await nextItem.update({
                 Amount: parseFloat(nextItem.Amount) + parseFloat(item.Amount)
             }, { transaction: t });
         } else {
-            await WeeklyPaySheetItem.create({
+            nextItem = await WeeklyPaySheetItem.create({
                 WeeklyPaySheetId: nextSheet.id,
                 PayeeId: item.PayeeId,
                 SiteId: item.SiteId,
@@ -993,6 +1219,26 @@ router.post('/items/:id/skip', async (req, res) => {
         await item.update({
             IsSkipped: true,
             SkippedToSheetId: nextSheet.id
+        }, { transaction: t });
+
+        // Log Skip action
+        await ActionLog.create({
+            WeeklyPaySheetId: item.WeeklyPaySheetId,
+            ActionType: 'Skip',
+            EntityType: 'WeeklyPaySheetItem',
+            EntityId: item.id,
+            BeforeData: {
+                IsSkipped: false,
+                SkippedToSheetId: null,
+                nextItemId: nextItem.id,
+                nextItemBeforeAmount: nextItemBeforeAmount
+            },
+            AfterData: {
+                IsSkipped: true,
+                SkippedToSheetId: nextSheet.id,
+                nextItemId: nextItem.id,
+                nextItemAfterAmount: parseFloat(nextItem.Amount)
+            }
         }, { transaction: t });
 
         await t.commit();
@@ -1067,12 +1313,14 @@ router.post('/items/:id/split-pay', async (req, res) => {
             transaction: t
         });
 
+        const nextItemBeforeAmount = nextItem ? parseFloat(nextItem.Amount) : 0;
+
         if (nextItem) {
             await nextItem.update({
                 Amount: parseFloat(nextItem.Amount) + remainderAmount
             }, { transaction: t });
         } else {
-            await WeeklyPaySheetItem.create({
+            nextItem = await WeeklyPaySheetItem.create({
                 WeeklyPaySheetId: nextSheet.id,
                 PayeeId: item.PayeeId,
                 SiteId: item.SiteId,
@@ -1080,6 +1328,27 @@ router.post('/items/:id/split-pay', async (req, res) => {
                 PaymentStatus: 'Pending'
             }, { transaction: t });
         }
+
+        // Log SplitPay action
+        await ActionLog.create({
+            WeeklyPaySheetId: item.WeeklyPaySheetId,
+            ActionType: 'SplitPay',
+            EntityType: 'WeeklyPaySheetItem',
+            EntityId: item.id,
+            BeforeData: {
+                Amount: totalAmount,
+                PaymentStatus: 'Pending',
+                nextItemId: nextItem.id,
+                nextItemBeforeAmount: nextItemBeforeAmount
+            },
+            AfterData: {
+                Amount: paidAmount,
+                PaymentStatus: 'Paid',
+                PaymentId: payment.id,
+                nextItemId: nextItem.id,
+                nextItemAfterAmount: parseFloat(nextItem.Amount)
+            }
+        }, { transaction: t });
 
         await t.commit();
         res.json({
@@ -1114,6 +1383,16 @@ router.post('/:id/extra-payment', async (req, res) => {
             PaymentNotes: Description || 'Extra payment',
             IsExtraPayment: true,
             ExtraPaymentDescription: Description || 'Additional works'
+        }, { transaction: t });
+
+        // Log ExtraPayment action
+        await ActionLog.create({
+            WeeklyPaySheetId: sheet.id,
+            ActionType: 'ExtraPayment',
+            EntityType: 'WeeklyPaySheetItem',
+            EntityId: item.id,
+            BeforeData: null,
+            AfterData: { id: item.id }
         }, { transaction: t });
 
         await t.commit();

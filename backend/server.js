@@ -38,6 +38,9 @@ app.use('/api/material-types', require('./routes/materialTypeRoutes'));
 app.use('/api/petty-cash', require('./routes/pettyCashRoutes'));
 app.use('/api/personal-expenses', require('./routes/personalExpenseRoutes'));
 app.use('/api/master-settings', require('./routes/masterSettingsRoutes'));
+app.use('/api/undo', require('./routes/undoRoutes'));
+app.use('/api/site-sections', require('./routes/siteSectionRoutes'));
+app.use('/api/site-projects', require('./routes/siteProjectRoutes'));
 
 // Database Initialization & Server Start
 async function startServer() {
@@ -49,8 +52,20 @@ async function startServer() {
         await sequelize.authenticate();
         console.log('Database connected...');
 
-        // Safe schema migrations — each silently skips if column already exists
+        // Safe schema migrations — each silently skips if column already exists or table does not exist yet
         const migrations = [
+            // Schema migrations (V1 -> V2)
+            "ALTER TABLE weekly_pay_sheets ADD COLUMN SelectedPayeeIds TEXT NULL;",
+            "ALTER TABLE weekly_pay_sheets ADD COLUMN SelectedSiteIds TEXT NULL;",
+            "ALTER TABLE payments ADD COLUMN PayeeId INT NULL;",
+            "ALTER TABLE labours ADD COLUMN PayeeId INT NULL;",
+            "ALTER TABLE sites ADD COLUMN Progress DECIMAL(5,2) DEFAULT 0;",
+            "ALTER TABLE site_materials ADD COLUMN Amount DECIMAL(18,2) DEFAULT 0;",
+            "ALTER TABLE site_materials ADD COLUMN DealerName VARCHAR(100) DEFAULT '';",
+            "ALTER TABLE sites ADD COLUMN NextMilestone VARCHAR(255) DEFAULT '';",
+            "ALTER TABLE materials DROP COLUMN Rate;",
+
+            // Schema migrations (V2 -> V3)
             "ALTER TABLE attendance_records ADD COLUMN PersonType VARCHAR(30) NOT NULL DEFAULT 'Mason';",
             "ALTER TABLE person_types ADD COLUMN DailyRate DECIMAL(18,2) NOT NULL DEFAULT 0;",
             "ALTER TABLE materials ADD COLUMN DealerName VARCHAR(100) DEFAULT '';",
@@ -70,10 +85,65 @@ async function startServer() {
                 SettingValue VARCHAR(255) NOT NULL DEFAULT '',
                 UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             );`,
-            `INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50');`
+            `INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50');`,
+
+            // Fix site_materials foreign key constraint mismatch (drop developer & client constraint names)
+            "ALTER TABLE site_materials DROP FOREIGN KEY site_materials_ibfk_14;",
+            "ALTER TABLE site_materials DROP FOREIGN KEY site_materials_ibfk_6;",
+            "ALTER TABLE site_materials ADD CONSTRAINT fk_site_materials_material_type FOREIGN KEY (MaterialId) REFERENCES material_types (Id) ON DELETE CASCADE ON UPDATE CASCADE;",
+
+            // Schema migrations (V3 -> V4)
+            "ALTER TABLE material_types ADD COLUMN CalculationMode VARCHAR(30) DEFAULT 'Manual';",
+            "ALTER TABLE site_materials ADD COLUMN Length DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE site_materials ADD COLUMN Breadth DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE site_materials ADD COLUMN SqFt DECIMAL(12,2) DEFAULT NULL;",
+            "ALTER TABLE site_materials ADD COLUMN WastagePercent DECIMAL(5,2) DEFAULT 0;",
+            "ALTER TABLE site_materials ADD COLUMN RatePerUnit DECIMAL(18,2) DEFAULT 0;",
+            "ALTER TABLE site_materials ADD COLUMN CalculationMode VARCHAR(30) DEFAULT 'Manual';",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN SourceType VARCHAR(30) DEFAULT 'Attendance';",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN SourceMaterialIds TEXT DEFAULT NULL;",
+            `CREATE TABLE IF NOT EXISTS action_logs (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                WeeklyPaySheetId INT NOT NULL,
+                ActionType VARCHAR(50) NOT NULL,
+                EntityType VARCHAR(30) NOT NULL,
+                EntityId INT DEFAULT NULL,
+                BeforeData JSON DEFAULT NULL,
+                AfterData JSON DEFAULT NULL,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                IsUndone TINYINT(1) NOT NULL DEFAULT 0,
+                INDEX idx_action_logs_sheet (WeeklyPaySheetId),
+                INDEX idx_action_logs_created (CreatedAt)
+            );`,
+            `CREATE TABLE IF NOT EXISTS site_sections (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                SiteId INT NOT NULL,
+                Name VARCHAR(100) NOT NULL,
+                SortOrder INT DEFAULT 0,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (SiteId) REFERENCES sites(Id) ON DELETE CASCADE
+            );`,
+            `CREATE TABLE IF NOT EXISTS site_projects (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                SiteId INT NOT NULL,
+                ProjectName VARCHAR(200) NOT NULL,
+                WorkType VARCHAR(100) DEFAULT 'New Construction',
+                StartDate DATE DEFAULT NULL,
+                EndDate DATE DEFAULT NULL,
+                Status VARCHAR(30) DEFAULT 'In Progress',
+                QuotedValue DECIMAL(18,2) DEFAULT 0,
+                Notes VARCHAR(500) DEFAULT NULL,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (SiteId) REFERENCES sites(Id) ON DELETE CASCADE
+            );`,
+            "ALTER TABLE site_materials ADD COLUMN SectionId INT DEFAULT NULL;",
+            "ALTER TABLE site_materials ADD COLUMN ProjectId INT DEFAULT NULL;",
+            "ALTER TABLE attendance_records ADD COLUMN SectionId INT DEFAULT NULL;",
+            "ALTER TABLE attendance_records ADD COLUMN ProjectId INT DEFAULT NULL;",
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN ProjectId INT DEFAULT NULL;"
         ];
         for (const sql of migrations) {
-            try { await sequelize.query(sql); } catch (e) { /* column already exists */ }
+            try { await sequelize.query(sql); } catch (e) { /* column already exists / table does not exist / error ignored */ }
         }
 
         // Use standard sync to avoid foreign key drop errors

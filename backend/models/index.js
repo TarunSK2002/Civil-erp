@@ -18,6 +18,9 @@ const PersonType = require('./PersonType');
 const MaterialType = require('./MaterialType');
 const PettyCash = require('./PettyCash');
 const PersonalExpense = require('./PersonalExpense');
+const ActionLog = require('./ActionLog');
+const SiteSection = require('./SiteSection');
+const SiteProject = require('./SiteProject');
 
 // Associations
 
@@ -101,6 +104,30 @@ AttendanceMisc.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
 MaterialType.hasMany(Material, { foreignKey: 'MaterialTypeId', as: 'Materials' });
 Material.belongsTo(MaterialType, { foreignKey: 'MaterialTypeId', as: 'MaterialType' });
 
+// WeeklyPaySheet <-> ActionLog (1:N)
+WeeklyPaySheet.hasMany(ActionLog, { foreignKey: 'WeeklyPaySheetId', as: 'ActionLogs' });
+ActionLog.belongsTo(WeeklyPaySheet, { foreignKey: 'WeeklyPaySheetId', as: 'Sheet' });
+
+// Site <-> SiteSection (1:N)
+Site.hasMany(SiteSection, { foreignKey: 'SiteId', as: 'Sections' });
+SiteSection.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
+
+// Site <-> SiteProject (1:N)
+Site.hasMany(SiteProject, { foreignKey: 'SiteId', as: 'Projects' });
+SiteProject.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
+
+// SiteSection <-> SiteMaterial (1:N)
+SiteSection.hasMany(SiteMaterial, { foreignKey: 'SectionId', as: 'SiteMaterials' });
+SiteMaterial.belongsTo(SiteSection, { foreignKey: 'SectionId', as: 'Section' });
+
+// SiteProject <-> SiteMaterial (1:N)
+SiteProject.hasMany(SiteMaterial, { foreignKey: 'ProjectId', as: 'SiteMaterials' });
+SiteMaterial.belongsTo(SiteProject, { foreignKey: 'ProjectId', as: 'Project' });
+
+// SiteProject <-> WeeklyPaySheetItem (1:N)
+SiteProject.hasMany(WeeklyPaySheetItem, { foreignKey: 'ProjectId', as: 'SheetItems' });
+WeeklyPaySheetItem.belongsTo(SiteProject, { foreignKey: 'ProjectId', as: 'Project' });
+
 module.exports = {
     sequelize,
     User,
@@ -121,5 +148,8 @@ module.exports = {
     PersonType,
     MaterialType,
     PettyCash,
-    PersonalExpense
+    PersonalExpense,
+    ActionLog,
+    SiteSection,
+    SiteProject
 };

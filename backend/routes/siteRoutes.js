@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Site, Client, Payment, SiteMaterial } = require('../models');
+const { Site, Client, Payment, SiteMaterial, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // @route   GET api/sites
@@ -50,14 +50,83 @@ router.get('/', async (req, res) => {
                 where: { SiteId: site.id }
             });
 
+            // Received Amount: Sum of all Collection payments for this site
+            const receivedAmount = await Payment.sum('Amount', {
+                where: { SiteId: site.id, PaymentCategory: 'Collection' }
+            }) || 0;
+
+            const siteValue = parseFloat(plainSite.SiteValue || 0);
+
             return {
                 ...plainSite,
                 ActiveLabourCount: activeLabourCount,
-                MaterialItemCount: materialItemCount
+                MaterialItemCount: materialItemCount,
+                ReceivedAmount: receivedAmount,
+                BalanceAmount: siteValue - receivedAmount
             };
         }));
 
         res.json(sitesWithStats);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET api/sites/:id
+// @desc    Get single site detail with financial summary
+router.get('/:id', async (req, res) => {
+    console.log('GET /api/sites/:id -> Requested site id:', req.params.id);
+    try {
+        const site = await Site.findByPk(req.params.id, {
+            include: [{ model: Client, as: 'Client', attributes: ['id', 'Name', 'MobileNumber', 'PaymentType'] }]
+        });
+        if (!site) return res.status(404).json({ msg: 'Site not found' });
+
+        const plainSite = site.get({ plain: true });
+        const siteValue = parseFloat(plainSite.SiteValue || 0);
+
+        // Received Amount: Sum of all Collection payments for this site
+        const receivedAmount = await Payment.sum('Amount', {
+            where: { SiteId: site.id, PaymentCategory: 'Collection' }
+        }) || 0;
+
+        // Active Labours
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const activeLabourCount = await Payment.count({
+            distinct: true,
+            col: 'LabourId',
+            where: {
+                SiteId: site.id,
+                PaymentCategory: 'Labour',
+                LabourId: { [Op.ne]: null },
+                PaymentDate: { [Op.gte]: thirtyDaysAgo }
+            }
+        });
+
+        // Material Items
+        const materialItemCount = await SiteMaterial.count({
+            distinct: true,
+            col: 'MaterialId',
+            where: { SiteId: site.id }
+        });
+
+        // Recent Collection payments (last 20)
+        const recentPayments = await Payment.findAll({
+            where: { SiteId: site.id, PaymentCategory: 'Collection' },
+            order: [['PaymentDate', 'DESC']],
+            limit: 20
+        });
+
+        res.json({
+            ...plainSite,
+            ReceivedAmount: receivedAmount,
+            BalanceAmount: siteValue - receivedAmount,
+            ActiveLabourCount: activeLabourCount,
+            MaterialItemCount: materialItemCount,
+            RecentPayments: recentPayments
+        });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

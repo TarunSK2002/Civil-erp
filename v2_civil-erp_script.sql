@@ -1,3 +1,5 @@
+CREATE DATABASE  IF NOT EXISTS `jeeva_construction` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+USE `jeeva_construction`;
 -- MySQL dump 10.13  Distrib 8.0.45, for Win64 (x86_64)
 --
 -- Host: localhost    Database: jeeva_construction
@@ -7,7 +9,7 @@
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!50503 SET NAMES utf8mb4 */;
+/*!50503 SET NAMES utf8 */;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -51,7 +53,7 @@ CREATE TABLE `attendance_miscs` (
   CONSTRAINT `attendance_miscs_ibfk_3` FOREIGN KEY (`AttendanceSheetId`) REFERENCES `attendance_sheets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_miscs_ibfk_4` FOREIGN KEY (`PayeeId`) REFERENCES `payees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_miscs_SiteId_foreign_idx` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -81,7 +83,7 @@ CREATE TABLE `attendance_records` (
   CONSTRAINT `attendance_records_ibfk_1` FOREIGN KEY (`AttendanceSheetId`) REFERENCES `attendance_sheets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_records_ibfk_2` FOREIGN KEY (`PayeeId`) REFERENCES `payees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_records_ibfk_3` FOREIGN KEY (`SiteId`) REFERENCES `sites` (`Id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -101,7 +103,7 @@ CREATE TABLE `attendance_sheets` (
   `SelectedSiteIds` text,
   `CreatedAt` datetime DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -143,23 +145,6 @@ CREATE TABLE `labours` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `master_settings`
---
-
-DROP TABLE IF EXISTS `master_settings`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `master_settings` (
-  `Id` int NOT NULL AUTO_INCREMENT,
-  `SettingKey` varchar(100) NOT NULL,
-  `SettingValue` varchar(255) NOT NULL DEFAULT '',
-  `UpdatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`Id`),
-  UNIQUE KEY `SettingKey` (`SettingKey`)
-) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `material_types`
 --
 
@@ -172,8 +157,6 @@ CREATE TABLE `material_types` (
   `IsActive` tinyint(1) NOT NULL DEFAULT '1',
   `SortOrder` int NOT NULL DEFAULT '0',
   `CreatedAt` datetime DEFAULT NULL,
-  `Price` decimal(18,2) NOT NULL DEFAULT '0.00',
-  `DefaultUnit` varchar(50) DEFAULT 'nos',
   PRIMARY KEY (`Id`),
   UNIQUE KEY `Name` (`Name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -195,7 +178,7 @@ CREATE TABLE `materials` (
   `AccountNo` varchar(30) DEFAULT '',
   `MaterialTypeId` int DEFAULT NULL,
   PRIMARY KEY (`Id`)
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -485,4 +468,4 @@ CREATE TABLE `weekly_pay_sheets` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-06-02  6:51:08
+-- Dump completed on 2026-05-22 13:24:26

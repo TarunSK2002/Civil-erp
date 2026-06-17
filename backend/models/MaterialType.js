@@ -33,6 +33,11 @@ const MaterialType = sequelize.define('MaterialType', {
         allowNull: true,
         defaultValue: 'nos'
     },
+    CalculationMode: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: 'Manual'
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

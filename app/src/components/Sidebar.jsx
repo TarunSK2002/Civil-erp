@@ -121,7 +121,7 @@ const Sidebar = ({ expanded }) => {
 
         <SidebarItem to="/clients" icon={Users} label="Clients" expanded={expanded} />
         <SidebarItem to="/sites" icon={Home} label="Sites" expanded={expanded} />
-        <SidebarItem to="/sites/status" icon={ClipboardList} label="Site Status" expanded={expanded} />
+        {/* <SidebarItem to="/sites/status" icon={ClipboardList} label="Site Status" expanded={expanded} /> */}
         <SidebarItem to="/materials/purchase" icon={ShoppingCart} label="Purchase" expanded={expanded} />
         <SidebarItem to="/labour" icon={HardHat} label="Labour" expanded={expanded} />
         <SidebarItem to="/materials" icon={Package} label="Dealers" expanded={expanded} />

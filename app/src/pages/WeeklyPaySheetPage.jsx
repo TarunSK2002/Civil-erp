@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Table2, ChevronDown, Check, X, Loader2, Trash2,
   Calendar, CreditCard, FileSpreadsheet, Users, Building2,
-  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, Tag
+  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, Tag, RotateCcw
 } from 'lucide-react';
 import api from '../api/axios';
 import './WeeklyPaySheetPage.css';
@@ -42,6 +42,12 @@ const WeeklyPaySheetPage = () => {
   const [splitAmount, setSplitAmount] = useState('');
   const [showExtraPaymentModal, setShowExtraPaymentModal] = useState(false);
   const [extraPayForm, setExtraPayForm] = useState({ SiteId: '', Amount: '', Description: '' });
+
+  // Material Details & Discounts
+  const [popupDiscounts, setPopupDiscounts] = useState({});
+  const [purchaseDetailsOpen, setPurchaseDetailsOpen] = useState(true);
+  const [savingPopupDiscounts, setSavingPopupDiscounts] = useState(false);
+  const [toast, setToast] = useState(null); // { message, type }
 
   // Material Discount Popup
   const [materialPopup, setMaterialPopup] = useState(null); // { siteId, siteName }
@@ -105,6 +111,103 @@ const WeeklyPaySheetPage = () => {
       setSelectedSiteIds(sheetData.selectedSiteIds);
     }
   }, [showAddSiteModal, sheetData]);
+
+  // Helper to parse/get purchase items for a supplier cell
+  const getCellPurchaseItems = useCallback((cell, sId) => {
+    if (!cell || !cell.sourceMaterialIds || !sheetData?.materialData?.[sId]?.items) return [];
+    try {
+      const ids = typeof cell.sourceMaterialIds === 'string' ? JSON.parse(cell.sourceMaterialIds) : cell.sourceMaterialIds;
+      if (!Array.isArray(ids)) return [];
+      return sheetData.materialData[sId].items.filter(item => ids.includes(item.id));
+    } catch (e) {
+      console.error('Failed to parse sourceMaterialIds', e);
+      return [];
+    }
+  }, [sheetData]);
+
+  // Sync popupDiscounts state when payment modal opens for a supplier cell
+  useEffect(() => {
+    if (showPayModal && showPayModal !== 'all') {
+      const cellData = sheetData?.grid?.[showPayModal];
+      if (cellData && cellData.sourceType === 'Material') {
+        const siteId = parseInt(showPayModal.split('_')[1]);
+        const items = getCellPurchaseItems(cellData, siteId);
+        const initDiscounts = {};
+        items.forEach(it => {
+          initDiscounts[it.id] = it.discount;
+        });
+        setPopupDiscounts(initDiscounts);
+        setPurchaseDetailsOpen(true);
+      }
+    } else {
+      setPopupDiscounts({});
+    }
+  }, [showPayModal, sheetData, getCellPurchaseItems]);
+
+  // Toast Helper
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  // Toast Auto-clear
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Undo triggers
+  const triggerUndo = async () => {
+    if (!selectedSheetId) return;
+    try {
+      const res = await api.post('/undo/latest', { WeeklyPaySheetId: selectedSheetId });
+      showToast(res.data.msg || 'Action undone successfully!', 'success');
+      fetchSheetData(selectedSheetId);
+      fetchSheets();
+    } catch (err) {
+      console.error('Undo error:', err);
+      showToast(err.response?.data?.msg || 'Nothing to undo', 'error');
+    }
+  };
+
+  // Ctrl+Z handler
+  useEffect(() => {
+    const handleKeyDown = async (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+          return;
+        }
+        e.preventDefault();
+        await triggerUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSheetId]);
+
+  // Update discounts inside the payment popup
+  const handleSavePopupDiscounts = async (items) => {
+    setSavingPopupDiscounts(true);
+    try {
+      const updates = items.map(item => {
+        const disc = parseFloat(popupDiscounts[item.id]) || 0;
+        return api.patch(`/site-materials/${item.id}/discount`, { Discount: disc });
+      });
+      await Promise.all(updates);
+      // Refresh sheet data: will automatically sync dealer cell amounts
+      await fetchSheetData(selectedSheetId);
+      showToast('Discounts updated successfully', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast(err.response?.data?.msg || 'Failed to update discounts', 'error');
+    } finally {
+      setSavingPopupDiscounts(false);
+    }
+  };
 
   // ---- API Calls ----
   const fetchSheets = async () => {
@@ -267,6 +370,15 @@ const WeeklyPaySheetPage = () => {
     if (sheetData?.sheet?.Status === 'Closed') return; // Read-only
     const key = payeeId ? `${payeeId}_${siteId}` : `income_${siteId}`;
     const cellData = sheetData?.grid?.[key];
+
+    const payee = sheetData?.payees?.find(p => p.id === payeeId);
+    if (payee?.Type === 'Supplier') {
+      if (cellData && cellData.amount > 0) {
+        setShowPayModal(key);
+      }
+      return;
+    }
+
     if (cellData?.status === 'Paid') return; // Don't edit paid cells
     setEditingCell(key);
     setEditValue(cellData?.amount > 0 ? String(cellData.amount) : '');
@@ -487,9 +599,19 @@ const WeeklyPaySheetPage = () => {
   // ---- Filter payees ----
   const getFilteredPayees = () => {
     if (!sheetData?.payees) return [];
-    if (statusFilter === 'All') return sheetData.payees;
+    
+    let list = sheetData.payees;
+    if (statusFilter === 'Labour') {
+      list = list.filter(payee => payee.Type !== 'Supplier');
+    } else if (statusFilter === 'Supplier') {
+      list = list.filter(payee => payee.Type === 'Supplier');
+    }
 
-    return sheetData.payees.filter(payee => {
+    if (statusFilter === 'All' || statusFilter === 'Labour' || statusFilter === 'Supplier') {
+      return list;
+    }
+
+    return list.filter(payee => {
       const sites = sheetData.sites || [];
       return sites.some(site => {
         const key = `${payee.id}_${site.id}`;
@@ -614,6 +736,14 @@ const WeeklyPaySheetPage = () => {
                     <CheckCircle2 size={14} /> Pay All
                   </button>
                 )}
+                <button 
+                  className="wps-btn wps-btn-secondary wps-btn-sm" 
+                  onClick={triggerUndo}
+                  title="Undo last action (Ctrl+Z)"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <RotateCcw size={14} /> Undo
+                </button>
                 <button className="wps-btn wps-btn-secondary wps-btn-sm" onClick={() => setShowAddPayeeModal(true)}>
                   <Users size={14} /> Add Payees
                 </button>
@@ -645,7 +775,7 @@ const WeeklyPaySheetPage = () => {
 
         {/* Filters */}
         <div className="wps-filters">
-          {['All', 'Pending', 'Paid'].map(f => (
+          {['All', 'Labour', 'Supplier', 'Pending', 'Paid'].map(f => (
             <button
               key={f}
               className={`wps-filter-chip ${statusFilter === f ? 'active' : ''}`}
@@ -653,6 +783,8 @@ const WeeklyPaySheetPage = () => {
             >
               {f === 'Paid' && <CheckCircle2 size={12} />}
               {f === 'Pending' && <Clock size={12} />}
+              {f === 'Labour' && <Users size={12} />}
+              {f === 'Supplier' && <Package size={12} />}
               {f}
             </button>
           ))}
@@ -862,57 +994,17 @@ const WeeklyPaySheetPage = () => {
                   {fmt(sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0), 0))}
                 </td>
               </tr>
-
-              {/* MATERIAL PURCHASES Row */}
-              <tr className="wps-material-row">
-                <td style={{ fontWeight: 600 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px' }}>
-                    <Package size={14} color="#9C27B0" />
-                    <span style={{ color: '#9C27B0' }}>MATERIAL PURCHASES</span>
-                  </div>
-                </td>
-                {sheetData.sites.map(site => {
-                  const matNet = getMaterialNet(site.id);
-                  const matDiscount = getMaterialDiscount(site.id);
-                  const matItems = sheetData.materialData?.[site.id]?.items || [];
-                  const isClosed = sheetData?.sheet?.Status === 'Closed';
-                  return (
-                    <td key={site.id}>
-                      <div
-                        className={`wps-material-cell ${matItems.length > 0 && !isClosed ? 'clickable' : ''}`}
-                        onClick={() => matItems.length > 0 && !isClosed && openMaterialPopup(site.id, site.SiteName)}
-                        title={matItems.length > 0 ? (isClosed ? `${matItems.length} item(s)` : 'Click to view/edit discounts') : ''}
-                      >
-                        {matNet > 0 ? (
-                          <>
-                            <span className="wps-material-net">{fmt(matNet)}</span>
-                            {matDiscount > 0 && (
-                              <span className="wps-material-discount-badge">-{fmt(matDiscount)}</span>
-                            )}
-                          </>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
-                <td style={{ fontWeight: 700, color: '#9C27B0' }}>
-                  {fmt(getTotalMaterialNet())}
-                </td>
-              </tr>
-
               {/* SITE TOTAL (EXPENSES) Row */}
               <tr className="wps-total-row">
                 <td>SITE TOTAL (EXPENSES)</td>
                 {sheetData.sites.map(site => {
-                  const totalExpense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id);
+                  const totalExpense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
                   return (
                     <td key={site.id}>{fmt(totalExpense)}</td>
                   );
                 })}
                 <td>
-                  {fmt(getGrandTotal() + sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id), 0))}
+                  {fmt(getGrandTotal() + sheetData.sites.reduce((sum, site) => sum + (sheetData.extraPaymentData?.[site.id]?.total || 0), 0))}
                 </td>
               </tr>
 
@@ -1038,7 +1130,7 @@ const WeeklyPaySheetPage = () => {
                   const cellData = sheetData.grid?.[key];
                   const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
                   const income = (sheetData.incomeData?.[site.id] || 0) + pending;
-                  const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id);
+                  const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
                   const tally = income - expense;
                   return (
                     <td key={site.id} style={{ color: tally >= 0 ? '#4CAF50' : '#f44336' }}>
@@ -1052,7 +1144,7 @@ const WeeklyPaySheetPage = () => {
                     const cellData = sheetData.grid?.[key];
                     const pending = cellData?.status === 'Pending' ? cellData.amount : 0;
                     const income = (sheetData.incomeData?.[site.id] || 0) + pending;
-                    const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0) + getMaterialNet(site.id);
+                    const expense = getColTotal(site.id) + (sheetData.extraPaymentData?.[site.id]?.total || 0);
                     return sum + (income - expense);
                   }, 0))}
                 </td>
@@ -1349,31 +1441,71 @@ const WeeklyPaySheetPage = () => {
       {/* Mark as Paid Modal */}
       {showPayModal && (
         <div className="wps-modal-overlay" onClick={() => { setShowPayModal(null); setSplitMode(false); setSplitAmount(''); }}>
-          <div className="wps-modal" onClick={e => e.stopPropagation()}>
-            <h2>{splitMode ? 'Partial Payment' : 'Confirm Payment'}</h2>
+          <div className="wps-modal" onClick={e => e.stopPropagation()} style={{ width: '520px', maxWidth: '95vw', height: 'fit-content', maxHeight: '90vh', overflowY: 'auto', margin: 'auto' }}>
             {(() => {
               if (showPayModal === 'all') {
                 return (
-                  <div style={{
-                    padding: 16,
-                    borderRadius: 12,
-                    background: 'rgba(76, 175, 80, 0.08)',
-                    border: '1px solid rgba(76, 175, 80, 0.2)',
-                    marginBottom: 20,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                        Pay All Pending
+                  <>
+                    <h2>Confirm Payment</h2>
+                    <div style={{
+                      padding: 16,
+                      borderRadius: 12,
+                      background: 'rgba(76, 175, 80, 0.08)',
+                      border: '1px solid rgba(76, 175, 80, 0.2)',
+                      marginBottom: 20,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                          Pay All Pending
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#4CAF50' }}>
+                          {fmt(getPendingTotal())}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#4CAF50' }}>
-                        {fmt(getPendingTotal())}
-                      </div>
+                      <CheckCircle2 size={28} color="#4CAF50" />
                     </div>
-                    <CheckCircle2 size={28} color="#4CAF50" />
-                  </div>
+
+                    <div className="wps-modal-field">
+                      <label>Payment Date</label>
+                      <input
+                        type="date"
+                        value={payFormData.PaymentDate}
+                        onChange={e => setPayFormData({ ...payFormData, PaymentDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="wps-modal-field">
+                      <label>Payment Mode</label>
+                      <select
+                        value={payFormData.PaymentMode}
+                        onChange={e => setPayFormData({ ...payFormData, PaymentMode: e.target.value })}
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="GPay">GPay</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="Cheque">Cheque</option>
+                      </select>
+                    </div>
+                    <div className="wps-modal-field">
+                      <label>Notes (optional)</label>
+                      <textarea
+                        rows={2}
+                        value={payFormData.Notes}
+                        onChange={e => setPayFormData({ ...payFormData, Notes: e.target.value })}
+                        placeholder="Any remarks..."
+                        style={{ resize: 'none' }}
+                      />
+                    </div>
+                    <div className="wps-modal-actions">
+                      <button className="wps-btn wps-btn-secondary" onClick={() => setShowPayModal(null)}>Cancel</button>
+                      <button className="wps-btn wps-btn-success" onClick={handleMarkPaid}>
+                        <Check size={16} /> Confirm Payment
+                      </button>
+                    </div>
+                  </>
                 );
               }
 
@@ -1383,8 +1515,13 @@ const WeeklyPaySheetPage = () => {
               const siteId = isIncome ? parseInt(showPayModal.split('_')[1]) : parseInt(showPayModal.split('_')[1]);
               const payee = isIncome ? { Name: 'Client' } : sheetData?.payees?.find(p => p.id === payeeId);
               const site = sheetData?.sites?.find(s => s.id === siteId);
+              const isPaid = cellData?.status === 'Paid';
+              const purchaseItems = getCellPurchaseItems(cellData, siteId);
+
               return (
                 <>
+                  <h2>{isPaid ? 'Payment Details' : (splitMode ? 'Partial Payment' : 'Confirm Payment')}</h2>
+                  
                   <div style={{
                     padding: 16,
                     borderRadius: 12,
@@ -1405,107 +1542,250 @@ const WeeklyPaySheetPage = () => {
                     </div>
                     <CheckCircle2 size={28} color="#4CAF50" />
                   </div>
+
+                  {/* Purchase Details Section for Supplier items */}
+                  {cellData?.sourceType === 'Material' && purchaseItems.length > 0 && (
+                    <div className="wps-popup-purchase-details" style={{ marginBottom: 20 }}>
+                      <button
+                        type="button"
+                        className="wps-details-toggle"
+                        onClick={() => setPurchaseDetailsOpen(!purchaseDetailsOpen)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          width: '100%',
+                          background: 'rgba(156, 39, 176, 0.08)',
+                          border: '1px solid rgba(156, 39, 176, 0.2)',
+                          borderRadius: 10,
+                          padding: '10px 14px',
+                          color: '#CE93D8',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          marginBottom: purchaseDetailsOpen ? 12 : 0,
+                          outline: 'none'
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Package size={14} /> 📦 Purchase Details ({purchaseItems.length})
+                        </span>
+                        <ChevronDown
+                          size={16}
+                          style={{ transform: purchaseDetailsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+                        />
+                      </button>
+                      {purchaseDetailsOpen && (
+                        <div className="wps-details-content" style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, background: 'rgba(0,0,0,0.2)' }}>
+                          <table className="wps-details-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                <th style={{ textAlign: 'left', padding: '6px 4px', color: 'var(--text-muted)' }}>Item</th>
+                                <th style={{ textAlign: 'right', padding: '6px 4px', color: 'var(--text-muted)' }}>Bill</th>
+                                <th style={{ textAlign: 'center', padding: '6px 4px', color: '#FF9800' }}>Discount</th>
+                                <th style={{ textAlign: 'right', padding: '6px 4px', color: '#9C27B0' }}>Net</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {purchaseItems.map(item => {
+                                const disc = popupDiscounts[item.id] ?? item.discount;
+                                const net = Math.max(0, item.gross - (parseFloat(disc) || 0));
+                                return (
+                                  <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <td style={{ padding: '8px 4px' }}>
+                                      <div style={{ fontWeight: 600 }}>{item.materialName}</div>
+                                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{item.quantity} {item.unit}</div>
+                                    </td>
+                                    <td style={{ textAlign: 'right', padding: '8px 4px' }}>₹{item.gross.toLocaleString('en-IN')}</td>
+                                    <td style={{ padding: '8px 4px', width: 100 }}>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max={item.gross}
+                                        value={disc}
+                                        disabled={isPaid}
+                                        onChange={e => setPopupDiscounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                        style={{
+                                          width: '100%',
+                                          background: 'var(--bg-input)',
+                                          border: '1px solid rgba(255,152,0,0.3)',
+                                          borderRadius: 6,
+                                          padding: '4px 6px',
+                                          color: '#FF9800',
+                                          textAlign: 'right',
+                                          fontSize: 12
+                                        }}
+                                      />
+                                    </td>
+                                    <td style={{ textAlign: 'right', padding: '8px 4px', fontWeight: 700, color: '#9C27B0' }}>
+                                      ₹{net.toLocaleString('en-IN')}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {!isPaid && (
+                            <button
+                              type="button"
+                              className="wps-btn wps-btn-secondary wps-btn-xs"
+                              onClick={() => handleSavePopupDiscounts(purchaseItems)}
+                              disabled={savingPopupDiscounts}
+                              style={{ marginTop: 10, width: '100%', padding: '6px', fontSize: 11, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}
+                            >
+                              {savingPopupDiscounts ? <Loader2 size={12} className="wps-spinner" /> : <Check size={12} />}
+                              Update & Re-calculate Discounts
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {isPaid ? (
+                    <div style={{
+                      background: 'rgba(76, 175, 80, 0.08)',
+                      border: '1px solid rgba(76, 175, 80, 0.2)',
+                      borderRadius: 12,
+                      padding: 16,
+                      marginBottom: 20
+                    }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
+                        <div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Paid On</div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>
+                            {cellData.paymentDate ? new Date(cellData.paymentDate).toLocaleDateString('en-IN') : '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Payment Mode</div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>
+                            {cellData.paymentMode || '—'}
+                          </div>
+                        </div>
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Notes</div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>
+                            {cellData.paymentNotes || '—'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Split Pay option for single payee cells */}
+                      {!isIncome && (
+                        <div style={{ marginBottom: 16 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                            <input
+                              type="checkbox"
+                              checked={splitMode}
+                              onChange={(e) => {
+                                  setSplitMode(e.target.checked);
+                                  if (!e.target.checked) setSplitAmount('');
+                              }}
+                              style={{ width: 'auto', margin: 0 }}
+                            />
+                            Split Payment / Pay Partial Amount
+                          </label>
+                        </div>
+                      )}
+
+                      {splitMode && (
+                        <div className="wps-modal-field">
+                          <label>Amount to Pay Now (₹)</label>
+                          <input
+                            type="number"
+                            placeholder="Enter partial amount"
+                            value={splitAmount}
+                            onChange={e => setSplitAmount(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      <div className="wps-modal-field">
+                        <label>Payment Date</label>
+                        <input
+                          type="date"
+                          value={payFormData.PaymentDate}
+                          onChange={e => setPayFormData({ ...payFormData, PaymentDate: e.target.value })}
+                        />
+                      </div>
+                      <div className="wps-modal-field">
+                        <label>Payment Mode</label>
+                        <select
+                          value={payFormData.PaymentMode}
+                          onChange={e => setPayFormData({ ...payFormData, PaymentMode: e.target.value })}
+                        >
+                          <option value="Cash">Cash</option>
+                          <option value="GPay">GPay</option>
+                          <option value="UPI">UPI</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="Cheque">Cheque</option>
+                        </select>
+                      </div>
+                      <div className="wps-modal-field">
+                        <label>Notes (optional)</label>
+                        <textarea
+                          rows={2}
+                          value={payFormData.Notes}
+                          onChange={e => setPayFormData({ ...payFormData, Notes: e.target.value })}
+                          placeholder="Any remarks..."
+                          style={{ resize: 'none' }}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="wps-modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      {/* Skip button on the left for non-all payee pending payments */}
+                      {!isIncome && !isPaid && (
+                        <button
+                          className="wps-btn wps-btn-warning"
+                          type="button"
+                          onClick={() => {
+                            if (cellData) handleSkipItem(cellData.id);
+                          }}
+                          style={{ background: '#FF9800', color: 'white' }}
+                        >
+                          SKIP
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="wps-btn wps-btn-secondary" onClick={() => { setShowPayModal(null); setSplitMode(false); setSplitAmount(''); }}>
+                        {isPaid ? 'Close' : 'Cancel'}
+                      </button>
+                      {isPaid ? (
+                        <button
+                          className="wps-btn wps-btn-danger"
+                          onClick={() => {
+                            setShowPayModal(null);
+                            handleUnpay(cellData.id);
+                          }}
+                        >
+                          Revert Payment
+                        </button>
+                      ) : splitMode ? (
+                        <button
+                          className="wps-btn wps-btn-success"
+                          onClick={() => {
+                            if (cellData) handleSplitPay(cellData.id);
+                          }}
+                        >
+                          Split & Pay
+                        </button>
+                      ) : (
+                        <button className="wps-btn wps-btn-success" onClick={handleMarkPaid}>
+                          <Check size={16} /> Confirm Payment
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </>
               );
             })()}
-
-            {/* Split Pay option for single payee cells */}
-            {showPayModal !== 'all' && !showPayModal.startsWith('income_') && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={splitMode}
-                    onChange={(e) => {
-                      setSplitMode(e.target.checked);
-                      if (!e.target.checked) setSplitAmount('');
-                    }}
-                    style={{ width: 'auto', margin: 0 }}
-                  />
-                  Split Payment / Pay Partial Amount
-                </label>
-              </div>
-            )}
-
-            {splitMode && (
-              <div className="wps-modal-field">
-                <label>Amount to Pay Now (₹)</label>
-                <input
-                  type="number"
-                  placeholder="Enter partial amount"
-                  value={splitAmount}
-                  onChange={e => setSplitAmount(e.target.value)}
-                />
-              </div>
-            )}
-
-            <div className="wps-modal-field">
-              <label>Payment Date</label>
-              <input
-                type="date"
-                value={payFormData.PaymentDate}
-                onChange={e => setPayFormData({ ...payFormData, PaymentDate: e.target.value })}
-              />
-            </div>
-            <div className="wps-modal-field">
-              <label>Payment Mode</label>
-              <select
-                value={payFormData.PaymentMode}
-                onChange={e => setPayFormData({ ...payFormData, PaymentMode: e.target.value })}
-              >
-                <option value="Cash">Cash</option>
-                <option value="GPay">GPay</option>
-                <option value="UPI">UPI</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Cheque">Cheque</option>
-              </select>
-            </div>
-            <div className="wps-modal-field">
-              <label>Notes (optional)</label>
-              <textarea
-                rows={2}
-                value={payFormData.Notes}
-                onChange={e => setPayFormData({ ...payFormData, Notes: e.target.value })}
-                placeholder="Any remarks..."
-                style={{ resize: 'none' }}
-              />
-            </div>
-            <div className="wps-modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                {/* Skip button on the left for non-all payee pending payments */}
-                {showPayModal !== 'all' && !showPayModal.startsWith('income_') && (
-                  <button
-                    className="wps-btn wps-btn-warning"
-                    type="button"
-                    onClick={() => {
-                      const cellData = sheetData?.grid?.[showPayModal];
-                      if (cellData) handleSkipItem(cellData.id);
-                    }}
-                    style={{ background: '#FF9800', color: 'white' }}
-                  >
-                    SKIP
-                  </button>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="wps-btn wps-btn-secondary" onClick={() => { setShowPayModal(null); setSplitMode(false); setSplitAmount(''); }}>Cancel</button>
-                {splitMode ? (
-                  <button
-                    className="wps-btn wps-btn-success"
-                    onClick={() => {
-                      const cellData = sheetData?.grid?.[showPayModal];
-                      if (cellData) handleSplitPay(cellData.id);
-                    }}
-                  >
-                    Split & Pay
-                  </button>
-                ) : (
-                  <button className="wps-btn wps-btn-success" onClick={handleMarkPaid}>
-                    <Check size={16} /> Confirm Payment
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -1559,6 +1839,14 @@ const WeeklyPaySheetPage = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`wps-toast ${toast.type}`}>
+          {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

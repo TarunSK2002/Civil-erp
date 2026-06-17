@@ -64,6 +64,19 @@ const WeeklyPaySheetItem = sequelize.define('WeeklyPaySheetItem', {
         type: DataTypes.STRING(255),
         allowNull: true
     },
+    SourceType: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: 'Attendance'
+    },
+    SourceMaterialIds: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    ProjectId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

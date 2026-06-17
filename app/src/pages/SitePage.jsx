@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, Home, Users, Ruler, MapPin, Loader2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Plus, Search, Edit2, Trash2, Home, Users, Ruler, MapPin, Loader2, Eye, IndianRupee, CheckCircle2, Clock } from 'lucide-react';
 import api from '../api/axios';
 import SlidePanel from '../components/SlidePanel';
 
 const SitePage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sites, setSites] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -268,12 +269,37 @@ const SitePage = () => {
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: 'var(--bg-primary)', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>
+                <div style={{ backgroundColor: 'var(--bg-primary)', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
                   <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>ESTIMATED BUDGET</p>
                   <p style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--accent)' }}>₹{parseFloat(site.SiteValue || 0).toLocaleString('en-IN')}</p>
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '20px' }}>
+                  <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '8px' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle2 size={10} /> RECEIVED
+                    </p>
+                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--success)' }}>
+                      ₹{parseFloat(site.ReceivedAmount || 0).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '8px' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={10} /> BALANCE
+                    </p>
+                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: parseFloat(site.BalanceAmount || 0) > 0 ? 'var(--error)' : 'var(--success)' }}>
+                      ₹{parseFloat(site.BalanceAmount || 0).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                  <button 
+                    onClick={() => navigate(`/sites/${site.id}`)}
+                    style={{ background: 'var(--accent)', border: 'none', borderRadius: '6px', padding: '6px 12px', color: '#0F0F1A', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                  >
+                    <Eye size={14} /> View
+                  </button>
                   <button 
                     onClick={() => openEditModal(site)}
                     style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '6px 12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}

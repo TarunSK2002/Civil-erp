@@ -25,12 +25,14 @@ const MaterialPage = () => {
   const [newMaterialType, setNewMaterialType] = useState('');
   const [newMaterialPrice, setNewMaterialPrice] = useState('');
   const [newMaterialUnit, setNewMaterialUnit] = useState('nos');
+  const [newMaterialCalcMode, setNewMaterialCalcMode] = useState('Manual');
 
   // Edit state for material types
   const [editingTypeId, setEditingTypeId] = useState(null);
   const [editTypeName, setEditTypeName] = useState('');
   const [editTypePrice, setEditTypePrice] = useState('');
   const [editTypeUnit, setEditTypeUnit] = useState('nos');
+  const [editTypeCalcMode, setEditTypeCalcMode] = useState('Manual');
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('action') === 'add') {
@@ -137,11 +139,13 @@ const MaterialPage = () => {
       await api.post('/material-types', {
         Name: newMaterialType.trim(),
         Price: parseFloat(newMaterialPrice) || 0,
-        DefaultUnit: newMaterialUnit
+        DefaultUnit: newMaterialUnit,
+        CalculationMode: newMaterialCalcMode
       });
       setNewMaterialType('');
       setNewMaterialPrice('');
       setNewMaterialUnit('nos');
+      setNewMaterialCalcMode('Manual');
       fetchMaterialTypes();
     } catch (err) {
       alert(err.response?.data?.msg || 'Failed to add material type');
@@ -163,6 +167,7 @@ const MaterialPage = () => {
     setEditTypeName(t.Name);
     setEditTypePrice(t.Price || '');
     setEditTypeUnit(t.DefaultUnit || 'nos');
+    setEditTypeCalcMode(t.CalculationMode || 'Manual');
   };
 
   const handleUpdateMaterialType = async (id) => {
@@ -171,7 +176,8 @@ const MaterialPage = () => {
       await api.put(`/material-types/${id}`, {
         Name: editTypeName.trim(),
         Price: parseFloat(editTypePrice) || 0,
-        DefaultUnit: editTypeUnit
+        DefaultUnit: editTypeUnit,
+        CalculationMode: editTypeCalcMode
       });
       setEditingTypeId(null);
       fetchMaterialTypes();
@@ -464,11 +470,23 @@ const MaterialPage = () => {
                   value={newMaterialUnit}
                   onChange={e => setNewMaterialUnit(e.target.value)}
                   style={{
-                    flex: 2, backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)',
+                    flex: 1, backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)',
                     borderRadius: '8px', padding: '9px', color: 'var(--text-primary)', outline: 'none', fontSize: 13
                   }}
                 >
                   {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <select
+                  value={newMaterialCalcMode}
+                  onChange={e => setNewMaterialCalcMode(e.target.value)}
+                  style={{
+                    flex: 1, backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)',
+                    borderRadius: '8px', padding: '9px', color: 'var(--text-primary)', outline: 'none', fontSize: 13
+                  }}
+                >
+                  <option value="Manual">Manual</option>
+                  <option value="QuantityRate">Qty × Rate</option>
+                  <option value="SqFtRate">SqFt × Rate</option>
                 </select>
                 <button
                   onClick={handleAddMaterialType}
@@ -521,11 +539,23 @@ const MaterialPage = () => {
                           value={editTypeUnit}
                           onChange={e => setEditTypeUnit(e.target.value)}
                           style={{
-                            flex: 2, backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)',
+                            flex: 1, backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)',
                             borderRadius: '6px', padding: '7px 10px', color: 'var(--text-primary)', outline: 'none', fontSize: 13
                           }}
                         >
                           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                        <select
+                          value={editTypeCalcMode}
+                          onChange={e => setEditTypeCalcMode(e.target.value)}
+                          style={{
+                            flex: 1, backgroundColor: 'var(--bg-input)', border: '1px solid var(--border)',
+                            borderRadius: '6px', padding: '7px 10px', color: 'var(--text-primary)', outline: 'none', fontSize: 13
+                          }}
+                        >
+                          <option value="Manual">Manual</option>
+                          <option value="QuantityRate">Qty × Rate</option>
+                          <option value="SqFtRate">SqFt × Rate</option>
                         </select>
                         <button
                           onClick={() => handleUpdateMaterialType(t.id)}
@@ -535,7 +565,7 @@ const MaterialPage = () => {
                         </button>
                         <button
                           onClick={() => setEditingTypeId(null)}
-                          style={{ padding: '7px 10px', borderRadius: '6px', background: 'rgba(244,67,54,0.1)', border: '1px solid rgba(244,67,54,0.2)', color: '#F44336', cursor: 'pointer' }}
+                          style={{ padding: '7px 10px', borderRadius: '6px', background: 'rgba(244,67,54,0.1)', border: '1px solid rgba(244,67,54,0.2)', color: '#F44336', cursor: 'pointer', fontSize: 12 }}
                         >
                           Cancel
                         </button>
@@ -548,7 +578,7 @@ const MaterialPage = () => {
                         <Package size={14} color="#4DB6AC" />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: 13 }}>{t.Name}</div>
-                          {(t.Price > 0 || t.DefaultUnit) && (
+                          {(t.Price > 0 || t.DefaultUnit || t.CalculationMode) && (
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                               {t.Price > 0 && (
                                 <span style={{ background: 'rgba(76,175,80,0.1)', color: '#4CAF50', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
@@ -558,6 +588,11 @@ const MaterialPage = () => {
                               {t.DefaultUnit && (
                                 <span style={{ background: 'rgba(0,188,212,0.1)', color: '#00BCD4', padding: '1px 6px', borderRadius: 4 }}>
                                   {t.DefaultUnit}
+                                </span>
+                              )}
+                              {t.CalculationMode && (
+                                <span style={{ background: 'rgba(156,39,176,0.1)', color: '#9C27B0', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                                  {t.CalculationMode}
                                 </span>
                               )}
                             </div>

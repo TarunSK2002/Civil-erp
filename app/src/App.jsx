@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ClientPage from './pages/ClientPage';
 import SitePage from './pages/SitePage';
+import SiteDetailPage from './pages/SiteDetailPage';
 import LabourPage from './pages/LabourPage';
 import MaterialPage from './pages/MaterialPage';
 import MaterialPurchasePage from './pages/MaterialPurchasePage';
@@ -49,6 +50,7 @@ function App() {
               <Route index element={<DashboardPage />} />
               <Route path="clients" element={<ClientPage />} />
               <Route path="sites" element={<SitePage />} />
+              <Route path="sites/:id" element={<SiteDetailPage />} />
               <Route path="sites/status" element={<SiteStatusPage />} />
               <Route path="labour" element={<LabourPage />} />
               <Route path="materials" element={<MaterialPage />} />

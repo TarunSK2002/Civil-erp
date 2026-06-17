@@ -70,6 +70,7 @@ function createWindow() {
     );
 
     // DevTools removed — no longer opens automatically
+    win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {

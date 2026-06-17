@@ -487,9 +487,9 @@
   text-transform: uppercase;
 }
 
-.wps-payee-badge.Labour { background: rgba(156, 39, 176, 0.15); color: #CE93D8; }
-.wps-payee-badge.Contractor { background: rgba(33, 150, 243, 0.15); color: #64B5F6; }
-.wps-payee-badge.Supplier { background: rgba(0, 150, 136, 0.15); color: #4DB6AC; }
+.wps-payee-badge.Labour { background: rgba(33, 150, 243, 0.15); color: #64B5F6; }
+.wps-payee-badge.Contractor { background: rgba(0, 188, 212, 0.15); color: #00BCD4; }
+.wps-payee-badge.Supplier { background: rgba(156, 39, 176, 0.15); color: #CE93D8; }
 .wps-payee-badge.Material { background: rgba(255, 152, 0, 0.15); color: #FFB74D; }
 .wps-payee-badge.Advance { background: rgba(244, 67, 54, 0.15); color: #EF5350; }
 .wps-payee-badge.Other { background: rgba(158, 158, 158, 0.15); color: #BDBDBD; }
@@ -945,4 +945,111 @@
   .wps-summary {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ---- Toast Notifications ---- */
+.wps-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 12px 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1100;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+  font-weight: 600;
+  animation: slideInUp 0.3s ease;
+}
+
+.wps-toast.success {
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.wps-toast.error {
+  border-color: rgba(244, 67, 54, 0.4);
+  color: #F44336;
+  background: rgba(244, 67, 54, 0.08);
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ---- Purchase Details Section Inside Payment Popup ---- */
+.wps-popup-purchase-details {
+  width: 100%;
+}
+
+.wps-details-toggle {
+  outline: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.wps-details-toggle:hover {
+  background: rgba(156, 39, 176, 0.15) !important;
+  border-color: rgba(156, 39, 176, 0.3) !important;
+}
+
+.wps-details-content {
+  margin-top: 8px;
+}
+
+.wps-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+
+.wps-details-table th,
+.wps-details-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.wps-details-table th {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.wps-detail-mat-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wps-detail-mat-qty {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.wps-detail-disc-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 6px;
+  padding: 4px 6px;
+  color: #FF9800;
+  text-align: right;
+  font-size: 12px;
+  outline: none;
+}
+
+.wps-detail-disc-input:focus {
+  border-color: #FF9800;
 }

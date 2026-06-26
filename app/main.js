@@ -68,7 +68,7 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js')
         },
         backgroundColor: '#1A1A2E',
-        title: 'Jeeva Construction',
+        title: 'Jeeva Cloud ERP',
         icon: path.join(__dirname, 'public/logo.jpeg'),
         autoHideMenuBar: true,
     });

@@ -108,7 +108,7 @@ const Sidebar = ({ expanded }) => {
         {expanded && (
           <div className="fade-in">
             <h1 style={{ fontSize: '18px', fontWeight: '900', margin: 0, color: 'var(--accent)', lineHeight: 1, letterSpacing: '0.5px' }}>JEEVA</h1>
-            <p style={{ fontSize: '9px', margin: 0, color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '1px' }}>CONSTRUCTION</p>
+            <p style={{ fontSize: '9px', margin: 0, color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '1px' }}>CLOUD ERP</p>
           </div>
         )}
       </div>

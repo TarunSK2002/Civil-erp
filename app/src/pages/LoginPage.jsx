@@ -65,7 +65,7 @@ const LoginPage = () => {
         </div>
 
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '8px' }}>Welcome Back</h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '32px' }}>Login to Jeeva Construction Manager</p>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '32px' }}>Login to Jeeva Cloud ERP</p>
 
         {error && (
           <div style={{ 

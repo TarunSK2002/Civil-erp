@@ -24,8 +24,8 @@ router.get('/', async (req, res) => {
         });
         res.json(clients);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error('GET /api/clients error:', err);
+        res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
 
@@ -41,8 +41,8 @@ router.post('/', async (req, res) => {
         });
         res.json(newClient);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error('POST /api/clients error:', err);
+        res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
 

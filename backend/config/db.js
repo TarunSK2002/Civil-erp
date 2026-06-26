@@ -26,8 +26,21 @@ if (dialect === 'sqlite') {
         define: {
             timestamps: true,
             underscored: true
+        },
+        pool: {
+            max: 1,      // SQLite supports only 1 write connection
+            min: 0,
+            acquire: 30000,
+            idle: 10000
+        },
+        retry: {
+            max: 3        // Retry on SQLITE_BUSY
         }
     });
+
+    // Enable WAL mode for better concurrent read/write performance
+    sequelize.query('PRAGMA journal_mode=WAL;').catch(() => {});
+    sequelize.query('PRAGMA busy_timeout=5000;').catch(() => {});
 } else {
     console.log('Initializing MySQL connection to host:', process.env.DB_HOST);
     sequelize = new Sequelize(
@@ -49,4 +62,121 @@ if (dialect === 'sqlite') {
     );
 }
 
+// Register beforeDefine hook on Sequelize to inject uuid and is_deleted into models
+sequelize.addHook('beforeDefine', (attributes, options) => {
+    const modelName = options.modelName || options.name.singular;
+    // Exclude system/special tables
+    if (modelName === 'SyncQueue' || modelName === 'User' || modelName === 'ActionLog' || modelName === 'LiftingChargeRate') {
+        return;
+    }
+
+    if (!attributes.uuid) {
+        attributes.uuid = {
+            type: Sequelize.UUID,
+            defaultValue: Sequelize.UUIDV4,
+            allowNull: false
+        };
+    }
+
+    if (!attributes.is_deleted) {
+        attributes.is_deleted = {
+            type: Sequelize.BOOLEAN,
+            defaultValue: false,
+            allowNull: false
+        };
+    }
+
+    // Add default scope to exclude soft-deleted records automatically
+    if (!options.defaultScope) {
+        options.defaultScope = {};
+    }
+    if (!options.defaultScope.where) {
+        options.defaultScope.where = {};
+    }
+    options.defaultScope.where.is_deleted = false;
+});
+
+// Register CRUD hooks for local SQLite synchronization queueing
+if (dialect === 'sqlite') {
+    sequelize.addHook('afterCreate', async (instance, options) => {
+        const modelName = instance.constructor.name;
+        if (modelName === 'SyncQueue' || modelName === 'User' || modelName === 'ActionLog' || modelName === 'LiftingChargeRate') {
+            return;
+        }
+
+        try {
+            const SyncQueue = sequelize.models.SyncQueue;
+            if (SyncQueue) {
+                await SyncQueue.create({
+                    tableName: instance.constructor.tableName,
+                    recordUuid: instance.uuid,
+                    action: 'CREATE',
+                    payload: JSON.stringify(instance.toJSON())
+                });
+                
+                // Schedule sync on next tick to avoid blocking the HTTP response
+                setImmediate(() => {
+                    const syncManager = require('../sync/syncManager');
+                    syncManager.syncNow();
+                });
+            }
+        } catch (err) {
+            console.error('Failed to queue CREATE operation:', err.message);
+        }
+    });
+
+    sequelize.addHook('afterUpdate', async (instance, options) => {
+        const modelName = instance.constructor.name;
+        if (modelName === 'SyncQueue' || modelName === 'User' || modelName === 'ActionLog' || modelName === 'LiftingChargeRate') {
+            return;
+        }
+
+        try {
+            const SyncQueue = sequelize.models.SyncQueue;
+            if (SyncQueue) {
+                await SyncQueue.create({
+                    tableName: instance.constructor.tableName,
+                    recordUuid: instance.uuid,
+                    action: 'UPDATE',
+                    payload: JSON.stringify(instance.toJSON())
+                });
+                
+                setImmediate(() => {
+                    const syncManager = require('../sync/syncManager');
+                    syncManager.syncNow();
+                });
+            }
+        } catch (err) {
+            console.error('Failed to queue UPDATE operation:', err.message);
+        }
+    });
+
+    sequelize.addHook('afterDestroy', async (instance, options) => {
+        const modelName = instance.constructor.name;
+        if (modelName === 'SyncQueue' || modelName === 'User' || modelName === 'ActionLog' || modelName === 'LiftingChargeRate') {
+            return;
+        }
+
+        try {
+            const SyncQueue = sequelize.models.SyncQueue;
+            if (SyncQueue) {
+                await SyncQueue.create({
+                    tableName: instance.constructor.tableName,
+                    recordUuid: instance.uuid,
+                    action: 'DELETE',
+                    payload: null
+                });
+                
+                setImmediate(() => {
+                    const syncManager = require('../sync/syncManager');
+                    syncManager.syncNow();
+                });
+            }
+        } catch (err) {
+            console.error('Failed to queue DELETE operation:', err.message);
+        }
+    });
+}
+
 module.exports = sequelize;
+

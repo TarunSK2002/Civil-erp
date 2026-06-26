@@ -136,6 +136,30 @@ app.post('/api/sync', async (req, res) => {
     }
 });
 
+// GET endpoint to fetch all data from cloud DB for synchronization
+app.get('/api/sync/pull', async (req, res) => {
+    try {
+        const dbModels = require('./models');
+        const data = {};
+        
+        const syncableModelKeys = Object.keys(dbModels).filter(key => {
+            return key !== 'sequelize' && key !== 'SyncQueue' && key !== 'User' && key !== 'ActionLog' && key !== 'LiftingChargeRate';
+        });
+
+        for (const key of syncableModelKeys) {
+            const Model = dbModels[key];
+            // Fetch all records from MySQL
+            const records = await Model.findAll();
+            data[Model.tableName] = records;
+        }
+
+        res.json(data);
+    } catch (err) {
+        console.error('Failed to pull sync data:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Database Initialization & Server Start
 async function startServer() {
     const isSqlite = process.env.DB_DIALECT === 'sqlite';

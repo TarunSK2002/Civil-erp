@@ -124,11 +124,95 @@ async function syncNow() {
       }
     }
 
+    // If all items were successfully uploaded (or none existed), run pull sync
+    const finalPendingCount = await getPendingCount();
+    if (finalPendingCount === 0) {
+      await _pullNow();
+    }
+
     if (onStatusChangeCallback) {
       onStatusChangeCallback({ isOnline, pendingCount: await getPendingCount() });
     }
   } catch (err) {
     console.error('Error running sync queue:', err.message);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+async function _pullNow() {
+  try {
+    const endpoint = `${RENDER_API_URL}/sync/pull`;
+    const response = await fetch(endpoint, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} on pull`);
+    }
+
+    const cloudData = await response.json();
+    const dbModels = require('../models');
+
+    // Disable foreign key checks during import to prevent constraint failures
+    const sequelize = dbModels.sequelize;
+    await sequelize.query('PRAGMA foreign_keys = OFF;').catch(() => {});
+
+    // Loop through each table and merge records locally
+    for (const tableName of Object.keys(cloudData)) {
+      const modelName = Object.keys(dbModels).find(key => {
+        const m = dbModels[key];
+        return m && m.tableName === tableName;
+      });
+
+      if (!modelName) continue;
+      const Model = dbModels[modelName];
+      const records = cloudData[tableName];
+
+      for (const cloudRecord of records) {
+        const uuid = cloudRecord.uuid;
+        if (!uuid) continue;
+
+        // Check if record already exists locally (bypassing default soft-delete scopes)
+        const existingRecord = await Model.unscoped().findOne({ where: { uuid } });
+
+        if (existingRecord) {
+          const updatePayload = { ...cloudRecord };
+          delete updatePayload.id;
+          delete updatePayload.Id;
+          await existingRecord.update(updatePayload, { hooks: false });
+        } else {
+          await Model.create(cloudRecord, { hooks: false });
+        }
+      }
+    }
+
+    // Re-enable foreign key checks
+    await sequelize.query('PRAGMA foreign_keys = ON;').catch(() => {});
+    console.log('Database pull synchronization complete.');
+  } catch (err) {
+    console.error('Error running pull sync:', err.message);
+  }
+}
+
+async function pullNow() {
+  if (isSyncing) return;
+  isSyncing = true;
+  try {
+    const onlineNow = await checkInternet();
+    if (!onlineNow) {
+      isOnline = false;
+      isSyncing = false;
+      return;
+    }
+    const backendOnline = await checkRenderBackend();
+    isOnline = backendOnline;
+    if (!backendOnline) {
+      isSyncing = false;
+      return;
+    }
+    await _pullNow();
   } finally {
     isSyncing = false;
   }
@@ -152,6 +236,7 @@ module.exports = {
   checkInternet,
   checkRenderBackend,
   syncNow,
+  pullNow,
   getPendingCount,
   startSyncLoop,
   setStatusCallback,

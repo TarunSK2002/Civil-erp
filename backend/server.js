@@ -87,7 +87,20 @@ app.post('/api/sync', async (req, res) => {
         const Model = dbModels[modelName];
         
         if (action === 'CREATE' || action === 'UPDATE') {
-            const existingRecord = await Model.findOne({ where: { uuid } });
+            let existingRecord = await Model.findOne({ where: { uuid } });
+            
+            // Fallback: If not found by uuid, check if a record with the same primary key exists
+            if (!existingRecord) {
+                const pkValue = payload.Id || payload.id;
+                if (pkValue) {
+                    existingRecord = await Model.findByPk(pkValue);
+                    if (existingRecord) {
+                        console.log(`Linking existing record in table "${tableName}" with ID ${pkValue} to UUID ${uuid}`);
+                        await existingRecord.update({ uuid });
+                    }
+                }
+            }
+
             if (existingRecord) {
                 // Update
                 const updatePayload = { ...payload };
@@ -99,7 +112,14 @@ app.post('/api/sync', async (req, res) => {
                 await Model.create({ ...payload, uuid });
             }
         } else if (action === 'DELETE') {
-            const existingRecord = await Model.findOne({ where: { uuid } });
+            let existingRecord = await Model.findOne({ where: { uuid } });
+            if (!existingRecord) {
+                const pkValue = payload.Id || payload.id;
+                if (pkValue) {
+                    existingRecord = await Model.findByPk(pkValue);
+                }
+            }
+            
             if (existingRecord) {
                 if (Model.rawAttributes.is_deleted) {
                     await existingRecord.update({ is_deleted: true });
@@ -274,6 +294,32 @@ async function startServer() {
         if (!isSqlite) {
             for (const sql of migrations) {
                 try { await sequelize.query(sql); } catch (e) { /* column already exists / table does not exist / error ignored */ }
+            }
+
+            // Dynamically ensure every syncable table has uuid and is_deleted columns in MySQL
+            const dbModels = require('./models');
+            for (const modelKey of Object.keys(dbModels)) {
+                if (modelKey === 'sequelize' || modelKey === 'SyncQueue' || modelKey === 'User' || modelKey === 'ActionLog' || modelKey === 'LiftingChargeRate') {
+                    continue;
+                }
+                const Model = dbModels[modelKey];
+                const tableName = Model.tableName;
+                
+                // Add uuid column if not exists (nullable is safe for existing tables with rows)
+                try {
+                    await sequelize.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`uuid\` CHAR(36) NULL;`);
+                    console.log(`Added uuid column to MySQL table: ${tableName}`);
+                } catch (e) {
+                    // Ignore column already exists or other errors
+                }
+                
+                // Add is_deleted column if not exists
+                try {
+                    await sequelize.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`is_deleted\` TINYINT(1) NOT NULL DEFAULT 0;`);
+                    console.log(`Added is_deleted column to MySQL table: ${tableName}`);
+                } catch (e) {
+                    // Ignore column already exists or other errors
+                }
             }
         }
 

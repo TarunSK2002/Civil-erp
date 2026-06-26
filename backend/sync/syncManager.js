@@ -55,9 +55,8 @@ async function syncNow() {
     const onlineNow = await checkInternet();
     
     if (!onlineNow) {
-      const statusChanged = (isOnline !== false);
       isOnline = false;
-      if (statusChanged && onStatusChangeCallback) {
+      if (onStatusChangeCallback) {
         onStatusChangeCallback({ isOnline, pendingCount: await getPendingCount() });
       }
       isSyncing = false;
@@ -90,28 +89,21 @@ async function syncNow() {
     for (const item of pendingItems) {
       try {
         const payload = item.payload ? JSON.parse(item.payload) : null;
-        let response;
-
-        // Replay operation to the server sync endpoints
-        const endpoint = `${RENDER_API_URL}/sync/${item.tableName.toLowerCase()}`;
         
-        if (item.action === 'CREATE' || item.action === 'UPDATE') {
-          response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              uuid: item.recordUuid,
-              action: item.action,
-              payload: payload
-            }),
-            signal: AbortSignal.timeout(5000)
-          });
-        } else if (item.action === 'DELETE') {
-          response = await fetch(`${endpoint}/${item.recordUuid}`, {
-            method: 'DELETE',
-            signal: AbortSignal.timeout(5000)
-          });
-        }
+        // Replay operation to the server unified sync endpoint
+        const endpoint = `${RENDER_API_URL}/sync`;
+        
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableName: item.tableName,
+            action: item.action,
+            uuid: item.recordUuid,
+            payload: payload
+          }),
+          signal: AbortSignal.timeout(5000)
+        });
 
         if (response && response.ok) {
           item.status = 'SYNCED';

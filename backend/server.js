@@ -67,6 +67,55 @@ app.post('/api/sync-trigger', async (req, res) => {
     }
 });
 
+// Generic database sync endpoint
+app.post('/api/sync', async (req, res) => {
+    const { tableName, action, uuid, payload } = req.body;
+    
+    try {
+        const dbModels = require('./models');
+        
+        // Find corresponding Sequelize model by tableName matching
+        const modelName = Object.keys(dbModels).find(key => {
+            const m = dbModels[key];
+            return m && m.tableName === tableName;
+        });
+        
+        if (!modelName) {
+            return res.status(400).json({ error: `Model for table "${tableName}" not found` });
+        }
+        
+        const Model = dbModels[modelName];
+        
+        if (action === 'CREATE' || action === 'UPDATE') {
+            const existingRecord = await Model.findOne({ where: { uuid } });
+            if (existingRecord) {
+                // Update
+                const updatePayload = { ...payload };
+                delete updatePayload.id;
+                delete updatePayload.Id;
+                await existingRecord.update(updatePayload);
+            } else {
+                // Create
+                await Model.create({ ...payload, uuid });
+            }
+        } else if (action === 'DELETE') {
+            const existingRecord = await Model.findOne({ where: { uuid } });
+            if (existingRecord) {
+                if (Model.rawAttributes.is_deleted) {
+                    await existingRecord.update({ is_deleted: true });
+                } else {
+                    await existingRecord.destroy();
+                }
+            }
+        }
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error(`Sync error on table "${tableName}":`, err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Database Initialization & Server Start
 async function startServer() {
     const isSqlite = process.env.DB_DIALECT === 'sqlite';

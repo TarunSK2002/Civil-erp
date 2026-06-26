@@ -34,6 +34,10 @@ const AttendancePaySheetPage = () => {
   const [editingMaster, setEditingMaster] = useState({ TeaExpense: '', BusExpense: '' });
   const [savingMaster, setSavingMaster] = useState(false);
 
+  const [showLiftingRatesModal, setShowLiftingRatesModal] = useState(false);
+  const [editingLiftingRates, setEditingLiftingRates] = useState({});
+  const [savingLiftingRates, setSavingLiftingRates] = useState(false);
+
   const newSheetTitleRef = useRef(null);
   const [newSheetForm, setNewSheetForm] = useState({
     Title: '', WeekStartDate: new Date().toISOString().split('T')[0],
@@ -84,6 +88,48 @@ const AttendancePaySheetPage = () => {
     }
   };
 
+  const fetchLiftingRates = async () => {
+    try {
+      const res = await api.get('/attendance-sheets/lifting/rates');
+      const ratesMap = {};
+      res.data.forEach(r => {
+        ratesMap[`${r.MaterialType}_${r.Floor}`] = r.Rate;
+      });
+      setEditingLiftingRates(ratesMap);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleSaveLiftingRates = async () => {
+    setSavingLiftingRates(true);
+    try {
+      const mats = ['M.Sand', 'Jally', 'Sengal'];
+      const floors = ['G.Floor', '1st floor', '2nd floor', '3rd floor'];
+      const promises = [];
+      mats.forEach(mat => {
+        floors.forEach(floor => {
+          const key = `${mat}_${floor}`;
+          const rate = editingLiftingRates[key] !== undefined ? parseFloat(editingLiftingRates[key]) : 0;
+          promises.push(
+            api.post('/attendance-sheets/lifting/rates', {
+              MaterialType: mat,
+              Floor: floor,
+              Rate: rate
+            })
+          );
+        });
+      });
+      await Promise.all(promises);
+      setShowLiftingRatesModal(false);
+      if (selectedSheetId) fetchSheetData(selectedSheetId);
+    } catch (e) {
+      alert('Failed to save lifting rates');
+    } finally {
+      setSavingLiftingRates(false);
+    }
+  };
+
   const handleCreateSheet = async () => {
     if (!newSheetForm.Title.trim()) return;
     try {
@@ -119,9 +165,15 @@ const AttendancePaySheetPage = () => {
     if (!sheetData?.grid) return 0;
     const key = `${payeeId}_${siteId}`;
     const records = sheetData.grid[key]?.records || [];
-    return records
+    const baseAmt = records
       .filter(r => r.date === entryDate)
       .reduce((sum, r) => sum + r.calculatedAmount, 0);
+
+    const liftingAmt = (sheetData.liftingRecords || [])
+      .filter(l => l.PayeeId === payeeId && l.SiteId === siteId && l.LiftingDate === entryDate)
+      .reduce((sum, l) => sum + parseFloat(l.Amount || 0), 0);
+
+    return baseAmt + liftingAmt;
   };
 
   // Get total labour count for a payee+site for the SELECTED DATE (for tea/bus calculation)
@@ -163,7 +215,12 @@ const AttendancePaySheetPage = () => {
         });
       }
     });
-    return total;
+
+    const liftingTotal = (sheetData.liftingRecords || [])
+      .filter(l => l.PayeeId === payeeId)
+      .reduce((sum, l) => sum + parseFloat(l.Amount || 0), 0);
+
+    return total + liftingTotal;
   };
 
   const getPayeeWeeklyLabourCount = (payeeId) => {
@@ -238,8 +295,15 @@ const AttendancePaySheetPage = () => {
         <div className="aps-header-actions">
           <button
             className="aps-btn aps-btn-secondary"
+            onClick={() => { fetchLiftingRates(); setShowLiftingRatesModal(true); }}
+            style={{ background: 'rgba(233,30,99,0.1)', color: '#E91E63', border: '1px solid rgba(233,30,99,0.3)', marginRight: '8px' }}
+          >
+            <IndianRupee size={16} /> Lifting Rates
+          </button>
+          <button
+            className="aps-btn aps-btn-secondary"
             onClick={() => { setEditingMaster({ ...masterSettings }); setShowMasterSettings(true); }}
-            style={{ background: 'rgba(255,152,0,0.1)', color: '#FF9800', border: '1px solid rgba(255,152,0,0.3)' }}
+            style={{ background: 'rgba(255,152,0,0.1)', color: '#FF9800', border: '1px solid rgba(255,152,0,0.3)', marginRight: '8px' }}
           >
             <Settings size={16} /> Master Settings
           </button>
@@ -508,7 +572,7 @@ const AttendancePaySheetPage = () => {
               payeeName={showEntryPanel.payeeName} siteName={showEntryPanel.siteName} date={showEntryPanel.date}
               records={showEntryPanel.records} shiftTypes={shiftTypes}
               masterSettings={masterSettings}
-              weeklySiteAttendance={sheetData?.grid?.[`${showEntryPanel.payeeId}_${showEntryPanel.siteId}`]?.totalAmount || 0}
+              weeklySiteAttendance={(sheetData?.grid?.[`${showEntryPanel.payeeId}_${showEntryPanel.siteId}`]?.records || []).reduce((sum, r) => sum + parseFloat(r.calculatedAmount || 0), 0)}
               weeklySiteLabourCount={getWeeklySiteLabourCount(showEntryPanel.payeeId, showEntryPanel.siteId)}
               onClose={() => setShowEntryPanel(null)}
               onSaved={() => { fetchSheetData(selectedSheetId); const key = `${showEntryPanel.payeeId}_${showEntryPanel.siteId}`;
@@ -519,6 +583,103 @@ const AttendancePaySheetPage = () => {
                 });
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Lifting Rates Modal */}
+      {showLiftingRatesModal && (
+        <div className="aps-modal-overlay" onClick={() => setShowLiftingRatesModal(false)}>
+          <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', margin: 'auto', maxWidth: 650 }}>
+            <h2>Master Lifting Rates Matrix</h2>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Set the standard rate for lifting each material to different floor levels. These rates populate automatically when logging lifting work.
+            </p>
+            <div style={{ overflowX: 'auto', marginBottom: 20 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', color: 'var(--text-muted)' }}>Floor</th>
+                    <th style={{ textAlign: 'right', padding: '10px 14px', color: 'var(--text-muted)' }}>M.Sand (₹/load)</th>
+                    <th style={{ textAlign: 'right', padding: '10px 14px', color: 'var(--text-muted)' }}>Jally (₹/load)</th>
+                    <th style={{ textAlign: 'right', padding: '10px 14px', color: 'var(--text-muted)' }}>Sengal (₹/piece)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['G.Floor', '1st floor', '2nd floor', '3rd floor'].map(floor => (
+                    <tr key={floor} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{floor === 'G.Floor' ? 'Ground Floor' : floor}</td>
+                      <td style={{ padding: '6px 14px', textAlign: 'right' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={{
+                            width: 100,
+                            padding: '6px 8px',
+                            background: 'var(--bg-input)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-primary)',
+                            borderRadius: 6,
+                            textAlign: 'right'
+                          }}
+                          value={editingLiftingRates[`M.Sand_${floor}`] || ''}
+                          onChange={e => setEditingLiftingRates({
+                            ...editingLiftingRates,
+                            [`M.Sand_${floor}`]: e.target.value
+                          })}
+                        />
+                      </td>
+                      <td style={{ padding: '6px 14px', textAlign: 'right' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={{
+                            width: 100,
+                            padding: '6px 8px',
+                            background: 'var(--bg-input)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-primary)',
+                            borderRadius: 6,
+                            textAlign: 'right'
+                          }}
+                          value={editingLiftingRates[`Jally_${floor}`] || ''}
+                          onChange={e => setEditingLiftingRates({
+                            ...editingLiftingRates,
+                            [`Jally_${floor}`]: e.target.value
+                          })}
+                        />
+                      </td>
+                      <td style={{ padding: '6px 14px', textAlign: 'right' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={{
+                            width: 100,
+                            padding: '6px 8px',
+                            background: 'var(--bg-input)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-primary)',
+                            borderRadius: 6,
+                            textAlign: 'right'
+                          }}
+                          value={editingLiftingRates[`Sengal_${floor}`] || ''}
+                          onChange={e => setEditingLiftingRates({
+                            ...editingLiftingRates,
+                            [`Sengal_${floor}`]: e.target.value
+                          })}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="aps-modal-actions">
+              <button className="aps-btn aps-btn-secondary" onClick={() => setShowLiftingRatesModal(false)}>Cancel</button>
+              <button className="aps-btn aps-btn-primary" onClick={handleSaveLiftingRates} disabled={savingLiftingRates}>
+                {savingLiftingRates ? 'Saving...' : 'Save Rates'}
+              </button>
+            </div>
           </div>
         </div>
       )}

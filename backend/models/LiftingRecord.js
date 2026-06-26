@@ -1,58 +1,59 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
-const SiteSection = sequelize.define('SiteSection', {
+const LiftingRecord = sequelize.define('LiftingRecord', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
         field: 'Id'
     },
+    AttendanceSheetId: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+    },
+    PayeeId: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+    },
     SiteId: {
         type: DataTypes.INTEGER,
         allowNull: false
     },
-    Name: {
-        type: DataTypes.STRING(100),
+    MaterialType: {
+        type: DataTypes.STRING(50),
         allowNull: false
     },
-    SortOrder: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        defaultValue: 0
+    Floor: {
+        type: DataTypes.STRING(50),
+        allowNull: false
     },
-    Length: {
-        type: DataTypes.DECIMAL(10, 2),
-        allowNull: true
-    },
-    Breadth: {
-        type: DataTypes.DECIMAL(10, 2),
-        allowNull: true
-    },
-    Height: {
-        type: DataTypes.DECIMAL(10, 2),
-        allowNull: true
-    },
-    Area: {
+    Quantity: {
         type: DataTypes.DECIMAL(12, 2),
-        allowNull: true
+        allowNull: false,
+        defaultValue: 1
     },
-    SectionValue: {
+    Rate: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: false,
         defaultValue: 0
     },
-    RatePerSqFt: {
+    Amount: {
         type: DataTypes.DECIMAL(18, 2),
-        allowNull: true
+        allowNull: false,
+        defaultValue: 0
+    },
+    LiftingDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: false
     },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
     }
 }, {
-    tableName: 'site_sections',
+    tableName: 'lifting_records',
     timestamps: false
 });
 
-module.exports = SiteSection;
+module.exports = LiftingRecord;

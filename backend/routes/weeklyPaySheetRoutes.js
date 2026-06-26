@@ -132,18 +132,27 @@ router.get('/', async (req, res) => {
     try {
         const sheets = await WeeklyPaySheet.findAll({
             order: [['WeekDate', 'DESC']],
-            include: [{
-                model: WeeklyPaySheetItem,
-                as: 'Items',
-                attributes: ['id', 'Amount', 'PaymentStatus']
-            }]
+            attributes: [
+                'id', 'Title', 'WeekDate', 'Status', 'CreatedAt', 'SelectedPayeeIds', 'SelectedSiteIds',
+                [
+                    sequelize.literal('(SELECT COUNT(*) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.WeeklyPaySheetId = WeeklyPaySheet.Id)'),
+                    'itemCount'
+                ],
+                [
+                    sequelize.literal('(SELECT COALESCE(SUM(Amount), 0) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.WeeklyPaySheetId = WeeklyPaySheet.Id)'),
+                    'totalAmount'
+                ],
+                [
+                    sequelize.literal('(SELECT COALESCE(SUM(Amount), 0) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.WeeklyPaySheetId = WeeklyPaySheet.Id AND weekly_pay_sheet_items.PaymentStatus = "Paid")'),
+                    'paidAmount'
+                ]
+            ]
         });
 
         const result = sheets.map(sheet => {
-            const items = sheet.Items || [];
-            const totalAmount = items.reduce((sum, it) => sum + parseFloat(it.Amount || 0), 0);
-            const paidAmount = items.filter(it => it.PaymentStatus === 'Paid')
-                .reduce((sum, it) => sum + parseFloat(it.Amount || 0), 0);
+            const itemCount = parseInt(sheet.getDataValue('itemCount') || 0);
+            const totalAmount = parseFloat(sheet.getDataValue('totalAmount') || 0);
+            const paidAmount = parseFloat(sheet.getDataValue('paidAmount') || 0);
             const pendingAmount = totalAmount - paidAmount;
             return {
                 id: sheet.id,
@@ -154,7 +163,7 @@ router.get('/', async (req, res) => {
                 totalAmount,
                 paidAmount,
                 pendingAmount,
-                itemCount: items.length,
+                itemCount,
                 payeeCount: (sheet.SelectedPayeeIds || []).length,
                 siteCount: (sheet.SelectedSiteIds || []).length
             };
@@ -1052,7 +1061,7 @@ router.post('/:id/import-attendance', async (req, res) => {
         const weekDate = new Date(weeklySheet.WeekDate);
 
         // Find matching attendance sheet (where weeklySheet.WeekDate falls between start and end)
-        const { AttendanceSheet, AttendanceRecord, AttendanceMisc } = require('../models');
+        const { AttendanceSheet, AttendanceRecord, AttendanceMisc, LiftingRecord } = require('../models');
         const attendanceSheet = await AttendanceSheet.findOne({
             where: {
                 WeekStartDate: { [Op.lte]: weekDate },
@@ -1062,19 +1071,34 @@ router.post('/:id/import-attendance', async (req, res) => {
 
         if (!attendanceSheet) return res.status(404).json({ msg: 'No matching attendance sheet found for this week' });
 
-        // Get all records and miscs for this attendance sheet
+        // Get all records, miscs, and lifting records for this attendance sheet
         const records = await AttendanceRecord.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
         const miscs = await AttendanceMisc.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
+        const liftingRecords = await LiftingRecord.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
 
-        // Update WeeklyPaySheet's selected lists to include those found in attendance
-        const attendancePayeeIds = [...new Set(records.map(r => r.PayeeId).concat(miscs.map(m => m.PayeeId)))].filter(id => !!id).map(id => parseInt(id));
-        const attendanceSiteIds = [...new Set(records.map(r => r.SiteId).concat(miscs.map(m => m.SiteId).filter(Boolean)))].filter(id => !!id).map(id => parseInt(id));
+        // Update WeeklyPaySheet's selected lists to include those found in attendance and lifting
+        const attendancePayeeIds = [...new Set([
+            ...records.map(r => r.PayeeId),
+            ...miscs.map(m => m.PayeeId),
+            ...liftingRecords.map(l => l.PayeeId)
+        ])].filter(id => !!id).map(id => parseInt(id));
+
+        const attendanceSiteIds = [...new Set([
+            ...records.map(r => r.SiteId),
+            ...miscs.map(m => m.SiteId).filter(Boolean),
+            ...liftingRecords.map(l => l.SiteId)
+        ])].filter(id => !!id).map(id => parseInt(id));
 
         // Aggregate by PayeeId_SiteId
         const totals = {};
         records.forEach(r => {
             const key = `${r.PayeeId}_${r.SiteId}`;
             totals[key] = (totals[key] || 0) + parseFloat(r.CalculatedAmount);
+        });
+
+        liftingRecords.forEach(l => {
+            const key = `${l.PayeeId}_${l.SiteId}`;
+            totals[key] = (totals[key] || 0) + parseFloat(l.Amount);
         });
         miscs.forEach(m => {
             let sId = m.SiteId;

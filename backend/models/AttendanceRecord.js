@@ -24,20 +24,23 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
         type: DataTypes.STRING(30),
         allowNull: false,
         defaultValue: 'Mason'
-        // "Mason", "Female Helper", "Male Helper", "Painter", "Tiles Layer", "Carpenter", "Driller", "Plumber", "Electrician"
     },
     AttendanceDate: {
         type: DataTypes.DATEONLY,
         allowNull: false
     },
+    CalculationMode: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: 'Shift' // 'Shift' or 'SqFt'
+    },
     ShiftType: {
         type: DataTypes.STRING(30),
-        allowNull: false
-        // "Half Shift", "1 Shift", "1.5 Shift", "2 Shift", "2.5 Shift", "3 Shift"
+        allowNull: true
     },
     ShiftMultiplier: {
         type: DataTypes.DECIMAL(3, 1),
-        allowNull: false
+        allowNull: true
     },
     LabourCount: {
         type: DataTypes.INTEGER,
@@ -46,13 +49,36 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
     },
     RatePerShift: {
         type: DataTypes.DECIMAL(18, 2),
-        allowNull: false
+        allowNull: true
+    },
+    Length: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    Breadth: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    SqFt: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true
+    },
+    RatePerSqFt: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true
+    },
+    SectionId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    ProjectId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     },
     CalculatedAmount: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: false,
         defaultValue: 0
-        // LabourCount * RatePerShift
     },
     CreatedAt: {
         type: DataTypes.DATE,

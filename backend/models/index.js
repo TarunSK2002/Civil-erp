@@ -21,6 +21,8 @@ const PersonalExpense = require('./PersonalExpense');
 const ActionLog = require('./ActionLog');
 const SiteSection = require('./SiteSection');
 const SiteProject = require('./SiteProject');
+const LiftingChargeRate = require('./LiftingChargeRate');
+const LiftingRecord = require('./LiftingRecord');
 
 // Associations
 
@@ -128,6 +130,26 @@ SiteMaterial.belongsTo(SiteProject, { foreignKey: 'ProjectId', as: 'Project' });
 SiteProject.hasMany(WeeklyPaySheetItem, { foreignKey: 'ProjectId', as: 'SheetItems' });
 WeeklyPaySheetItem.belongsTo(SiteProject, { foreignKey: 'ProjectId', as: 'Project' });
 
+// SiteSection <-> AttendanceRecord (1:N)
+SiteSection.hasMany(AttendanceRecord, { foreignKey: 'SectionId', as: 'AttendanceRecords' });
+AttendanceRecord.belongsTo(SiteSection, { foreignKey: 'SectionId', as: 'Section' });
+
+// SiteProject <-> AttendanceRecord (1:N)
+SiteProject.hasMany(AttendanceRecord, { foreignKey: 'ProjectId', as: 'AttendanceRecords' });
+AttendanceRecord.belongsTo(SiteProject, { foreignKey: 'ProjectId', as: 'Project' });
+
+// AttendanceSheet <-> LiftingRecord (1:N)
+AttendanceSheet.hasMany(LiftingRecord, { foreignKey: 'AttendanceSheetId', as: 'LiftingRecords' });
+LiftingRecord.belongsTo(AttendanceSheet, { foreignKey: 'AttendanceSheetId', as: 'Sheet' });
+
+// Payee <-> LiftingRecord (1:N)
+Payee.hasMany(LiftingRecord, { foreignKey: 'PayeeId', as: 'LiftingRecords' });
+LiftingRecord.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
+
+// Site <-> LiftingRecord (1:N)
+Site.hasMany(LiftingRecord, { foreignKey: 'SiteId', as: 'LiftingRecords' });
+LiftingRecord.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
+
 module.exports = {
     sequelize,
     User,
@@ -151,5 +173,7 @@ module.exports = {
     PersonalExpense,
     ActionLog,
     SiteSection,
-    SiteProject
+    SiteProject,
+    LiftingChargeRate,
+    LiftingRecord
 };

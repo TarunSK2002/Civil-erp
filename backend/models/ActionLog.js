@@ -26,11 +26,31 @@ const ActionLog = sequelize.define('ActionLog', {
     },
     BeforeData: {
         type: DataTypes.JSON,
-        allowNull: true
+        allowNull: true,
+        get() {
+            const val = this.getDataValue('BeforeData');
+            if (typeof val === 'string') {
+                try { return JSON.parse(val); } catch { return val; }
+            }
+            return val;
+        },
+        set(val) {
+            this.setDataValue('BeforeData', typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
+        }
     },
     AfterData: {
         type: DataTypes.JSON,
-        allowNull: true
+        allowNull: true,
+        get() {
+            const val = this.getDataValue('AfterData');
+            if (typeof val === 'string') {
+                try { return JSON.parse(val); } catch { return val; }
+            }
+            return val;
+        },
+        set(val) {
+            this.setDataValue('AfterData', typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
+        }
     },
     IsUndone: {
         type: DataTypes.BOOLEAN,

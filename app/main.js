@@ -4,6 +4,7 @@ const { fork } = require('child_process');
 const isDev = !app.isPackaged;
 
 let backendProcess = null;
+let mainWindow = null;
 
 function startBackend() {
     const backendDir = isDev 
@@ -18,9 +19,20 @@ function startBackend() {
         cwd: backendDir,
         env: {
             ...process.env,
-            ELECTRON_RUN_AS_NODE: '1'
+            ELECTRON_RUN_AS_NODE: '1',
+            DB_DIALECT: 'sqlite',
+            USER_DATA_PATH: app.getPath('userData')
         },
         stdio: 'pipe'
+    });
+
+    // Forward sync status events from backend to the renderer process
+    backendProcess.on('message', (message) => {
+        if (message && message.type === 'sync-status-changed') {
+            if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+                mainWindow.webContents.send('sync-status-changed', message.data);
+            }
+        }
     });
 
     if (backendProcess.stdout) {
@@ -62,6 +74,7 @@ function createWindow() {
 
     // Hide the menu bar on this window as well
     win.setMenuBarVisibility(false);
+    mainWindow = win;
 
     win.loadURL(
         isDev

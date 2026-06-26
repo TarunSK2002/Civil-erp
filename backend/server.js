@@ -19,6 +19,8 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.get('/health', (req, res) => res.json({ status: 'OK' }));
+
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/clients', require('./routes/clientRoutes'));
 app.use('/api/sites', require('./routes/siteRoutes'));
@@ -42,10 +44,37 @@ app.use('/api/undo', require('./routes/undoRoutes'));
 app.use('/api/site-sections', require('./routes/siteSectionRoutes'));
 app.use('/api/site-projects', require('./routes/siteProjectRoutes'));
 
+// Sync Routes
+const syncManager = require('./sync/syncManager');
+app.get('/api/sync-status', async (req, res) => {
+    try {
+        const isOnline = syncManager.isOnlineStatus();
+        const pendingCount = await syncManager.getPendingCount();
+        res.json({ isOnline, pendingCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/sync-trigger', async (req, res) => {
+    try {
+        await syncManager.syncNow();
+        const isOnline = syncManager.isOnlineStatus();
+        const pendingCount = await syncManager.getPendingCount();
+        res.json({ success: true, isOnline, pendingCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Database Initialization & Server Start
 async function startServer() {
-    // 1. Ensure DB exists
-    await ensureDatabaseExists();
+    const isSqlite = process.env.DB_DIALECT === 'sqlite';
+
+    // 1. Ensure DB exists (only for MySQL)
+    if (!isSqlite) {
+        await ensureDatabaseExists();
+    }
 
     try {
         // 2. Connect and Sync
@@ -140,15 +169,85 @@ async function startServer() {
             "ALTER TABLE site_materials ADD COLUMN ProjectId INT DEFAULT NULL;",
             "ALTER TABLE attendance_records ADD COLUMN SectionId INT DEFAULT NULL;",
             "ALTER TABLE attendance_records ADD COLUMN ProjectId INT DEFAULT NULL;",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN ProjectId INT DEFAULT NULL;"
+            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN ProjectId INT DEFAULT NULL;",
+            
+            // Schema migrations (V4 -> V5)
+            "ALTER TABLE site_sections ADD COLUMN Length DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE site_sections ADD COLUMN Breadth DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE site_sections ADD COLUMN Height DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE site_sections ADD COLUMN Area DECIMAL(12,2) DEFAULT NULL;",
+            "ALTER TABLE site_sections ADD COLUMN SectionValue DECIMAL(18,2) DEFAULT 0;",
+            "ALTER TABLE site_sections ADD COLUMN RatePerSqFt DECIMAL(18,2) DEFAULT NULL;",
+            "ALTER TABLE attendance_records ADD COLUMN CalculationMode VARCHAR(30) DEFAULT 'Shift';",
+            "ALTER TABLE attendance_records ADD COLUMN Length DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE attendance_records ADD COLUMN Breadth DECIMAL(10,2) DEFAULT NULL;",
+            "ALTER TABLE attendance_records ADD COLUMN SqFt DECIMAL(12,2) DEFAULT NULL;",
+            "ALTER TABLE attendance_records ADD COLUMN RatePerSqFt DECIMAL(18,2) DEFAULT NULL;",
+            `CREATE TABLE IF NOT EXISTS lifting_charge_rates (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                MaterialType VARCHAR(50) NOT NULL,
+                Floor VARCHAR(50) NOT NULL,
+                Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY idx_lifting_rates_mat_floor (MaterialType, Floor)
+            );`,
+            `INSERT IGNORE INTO lifting_charge_rates (MaterialType, Floor, Rate) VALUES
+                ('M.Sand', 'G.Floor', 1700.00),
+                ('M.Sand', '1st floor', 2200.00),
+                ('M.Sand', '2nd floor', 3200.00),
+                ('M.Sand', '3rd floor', 4200.00),
+                ('Jally', 'G.Floor', 2000.00),
+                ('Jally', '1st floor', 2600.00),
+                ('Jally', '2nd floor', 3600.00),
+                ('Jally', '3rd floor', 4600.00),
+                ('Sengal', 'G.Floor', 0.90),
+                ('Sengal', '1st floor', 1.30),
+                ('Sengal', '2nd floor', 2.20),
+                ('Sengal', '3rd floor', 3.60);`,
+            `CREATE TABLE IF NOT EXISTS lifting_records (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                AttendanceSheetId INT NOT NULL,
+                PayeeId INT NOT NULL,
+                SiteId INT NOT NULL,
+                MaterialType VARCHAR(50) NOT NULL,
+                Floor VARCHAR(50) NOT NULL,
+                Quantity DECIMAL(12,2) NOT NULL DEFAULT 1,
+                Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+                Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+                LiftingDate DATE NOT NULL,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (AttendanceSheetId) REFERENCES attendance_sheets(Id) ON DELETE CASCADE,
+                FOREIGN KEY (PayeeId) REFERENCES payees(Id) ON DELETE CASCADE,
+                FOREIGN KEY (SiteId) REFERENCES sites(Id) ON DELETE CASCADE
+            );`
         ];
-        for (const sql of migrations) {
-            try { await sequelize.query(sql); } catch (e) { /* column already exists / table does not exist / error ignored */ }
+        
+        if (!isSqlite) {
+            for (const sql of migrations) {
+                try { await sequelize.query(sql); } catch (e) { /* column already exists / table does not exist / error ignored */ }
+            }
         }
 
         // Use standard sync to avoid foreign key drop errors
         await sequelize.sync();
         console.log('Database synchronized.');
+
+        // Initialize Sync Queue & Start background sync loop if SQLite is local database
+        if (isSqlite) {
+            const SyncQueue = require('./sync/syncQueue');
+            await SyncQueue.sync();
+            
+            // Set up IPC status callback to notify Electron main process
+            syncManager.setStatusCallback((data) => {
+                if (process.send) {
+                    process.send({ type: 'sync-status-changed', data });
+                }
+            });
+
+            // Start check loop every 15 seconds
+            syncManager.startSyncLoop(15000);
+            console.log('Background sync manager loop started.');
+        }
 
         // 3. Ensure Default Admin User exists
         const { User } = require('./models');

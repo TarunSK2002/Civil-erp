@@ -2,6 +2,7 @@ import { Menu, Sun, Moon, LogOut } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import SyncStatus from './SyncStatus';
 
 const TopBar = ({ onToggleSidebar }) => {
   const { theme, toggleTheme } = useTheme();
@@ -62,6 +63,8 @@ const TopBar = ({ onToggleSidebar }) => {
             <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold' }}>{user?.role}</span>
           </div>
         </div>
+
+        <SyncStatus />
 
         <button 
           onClick={toggleTheme}

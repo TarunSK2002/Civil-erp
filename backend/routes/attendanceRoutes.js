@@ -125,11 +125,17 @@ router.get('/:id', async (req, res) => {
                 id: rec.id,
                 date: rec.AttendanceDate,
                 personType: rec.PersonType || 'Mason',
+                calculationMode: rec.CalculationMode || 'Shift',
                 shiftType: rec.ShiftType,
-                shiftMultiplier: parseFloat(rec.ShiftMultiplier),
+                shiftMultiplier: rec.ShiftMultiplier ? parseFloat(rec.ShiftMultiplier) : null,
                 labourCount: rec.LabourCount,
-                ratePerShift: parseFloat(rec.RatePerShift),
-                calculatedAmount: parseFloat(rec.CalculatedAmount)
+                ratePerShift: rec.RatePerShift ? parseFloat(rec.RatePerShift) : null,
+                calculatedAmount: parseFloat(rec.CalculatedAmount),
+                length: rec.Length ? parseFloat(rec.Length) : null,
+                breadth: rec.Breadth ? parseFloat(rec.Breadth) : null,
+                sqFt: rec.SqFt ? parseFloat(rec.SqFt) : null,
+                ratePerSqFt: rec.RatePerSqFt ? parseFloat(rec.RatePerSqFt) : null,
+                sectionId: rec.SectionId
             });
         });
 
@@ -161,6 +167,22 @@ router.get('/:id', async (req, res) => {
             dates.push(d.toISOString().split('T')[0]);
         }
 
+        // Fetch all lifting records for this sheet
+        const { LiftingRecord } = require('../models');
+        const liftingRecords = await LiftingRecord.findAll({
+            where: { AttendanceSheetId: sheet.id },
+            order: [['LiftingDate', 'ASC'], ['CreatedAt', 'ASC']]
+        });
+
+        // Add lifting records to grid totals
+        liftingRecords.forEach(l => {
+            const key = `${l.PayeeId}_${l.SiteId}`;
+            if (!grid[key]) {
+                grid[key] = { totalAmount: 0, records: [] };
+            }
+            grid[key].totalAmount += parseFloat(l.Amount || 0);
+        });
+
         res.json({
             id: sheet.id,
             Title: sheet.Title,
@@ -174,7 +196,8 @@ router.get('/:id', async (req, res) => {
             miscData,
             dates,
             selectedPayeeIds,
-            selectedSiteIds
+            selectedSiteIds,
+            liftingRecords
         });
     } catch (err) {
         console.error(err.message, err.stack);
@@ -351,21 +374,35 @@ router.delete('/:id/sites/:siteId', async (req, res) => {
 // ============ ATTENDANCE RECORDS ============
 
 // @route   POST /api/attendance-sheets/:id/records
-// @desc    Add a shift attendance record
+// @desc    Add a shift or sqft attendance record
 router.post('/:id/records', async (req, res) => {
-    const { PayeeId, SiteId, AttendanceDate, PersonType: personTypeName, ShiftType, ShiftMultiplier, LabourCount } = req.body;
+    const { PayeeId, SiteId, AttendanceDate, PersonType: personTypeName, CalculationMode, ShiftType, ShiftMultiplier, LabourCount, SectionId, Length, Breadth, RatePerSqFt } = req.body;
     try {
         const sheet = await AttendanceSheet.findByPk(req.params.id);
         if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
 
-        // Get rate from PersonType DailyRate
-        const personTypeRecord = await PersonType.findOne({
-            where: { Name: personTypeName || 'Mason' }
-        });
+        let calculatedAmount = 0;
+        let rate = 0;
+        let calculatedSqFt = null;
 
-        const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
-        const rate = dailyRate * parseFloat(ShiftMultiplier);
-        const calculatedAmount = parseInt(LabourCount) * rate;
+        const mode = CalculationMode || 'Shift';
+
+        if (mode === 'Shift') {
+            const personTypeRecord = await PersonType.findOne({
+                where: { Name: personTypeName || 'Mason' }
+            });
+            const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+            rate = dailyRate * parseFloat(ShiftMultiplier || 1);
+            calculatedAmount = parseInt(LabourCount || 1) * rate;
+        } else {
+            // SqFt Calculation
+            if (Length && Breadth) {
+                calculatedSqFt = parseFloat(Length) * parseFloat(Breadth);
+            }
+            const rateSqFt = parseFloat(RatePerSqFt || 0);
+            const count = parseInt(LabourCount || 1);
+            calculatedAmount = (calculatedSqFt !== null ? calculatedSqFt : 1) * rateSqFt * count;
+        }
 
         const record = await AttendanceRecord.create({
             AttendanceSheetId: parseInt(req.params.id),
@@ -373,10 +410,16 @@ router.post('/:id/records', async (req, res) => {
             SiteId: parseInt(SiteId),
             PersonType: personTypeName || 'Mason',
             AttendanceDate,
-            ShiftType,
-            ShiftMultiplier: parseFloat(ShiftMultiplier),
-            LabourCount: parseInt(LabourCount),
-            RatePerShift: rate,
+            CalculationMode: mode,
+            ShiftType: mode === 'Shift' ? ShiftType : null,
+            ShiftMultiplier: mode === 'Shift' ? parseFloat(ShiftMultiplier) : null,
+            LabourCount: parseInt(LabourCount || 1),
+            RatePerShift: mode === 'Shift' ? rate : null,
+            Length: mode === 'SqFt' && Length ? parseFloat(Length) : null,
+            Breadth: mode === 'SqFt' && Breadth ? parseFloat(Breadth) : null,
+            SqFt: mode === 'SqFt' ? calculatedSqFt : null,
+            RatePerSqFt: mode === 'SqFt' ? parseFloat(RatePerSqFt) : null,
+            SectionId: mode === 'SqFt' && SectionId ? parseInt(SectionId) : null,
             CalculatedAmount: calculatedAmount
         });
 
@@ -390,30 +433,64 @@ router.post('/:id/records', async (req, res) => {
 });
 
 // @route   PUT /api/attendance-sheets/:id/records/:recordId
-// @desc    Update a shift attendance record
+// @desc    Update a shift or sqft attendance record
 router.put('/:id/records/:recordId', async (req, res) => {
-    const { PersonType: personTypeName, ShiftType, ShiftMultiplier, LabourCount } = req.body;
+    const { PersonType: personTypeName, CalculationMode, ShiftType, ShiftMultiplier, LabourCount, SectionId, Length, Breadth, RatePerSqFt } = req.body;
     try {
         const record = await AttendanceRecord.findByPk(req.params.recordId);
         if (!record) return res.status(404).json({ msg: 'Record not found' });
 
-        // Get rate from PersonType DailyRate
-        const personTypeRecord = await PersonType.findOne({
-            where: { Name: personTypeName || record.PersonType }
-        });
+        const mode = CalculationMode || record.CalculationMode || 'Shift';
+        let calculatedAmount = 0;
+        let rate = 0;
+        let calculatedSqFt = null;
 
-        const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
-        const rate = dailyRate * parseFloat(ShiftMultiplier);
-        const calculatedAmount = parseInt(LabourCount) * rate;
+        if (mode === 'Shift') {
+            const personTypeRecord = await PersonType.findOne({
+                where: { Name: personTypeName || record.PersonType }
+            });
+            const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+            rate = dailyRate * parseFloat(ShiftMultiplier !== undefined ? ShiftMultiplier : record.ShiftMultiplier);
+            calculatedAmount = parseInt(LabourCount !== undefined ? LabourCount : record.LabourCount) * rate;
+        } else {
+            const finalLength = Length !== undefined ? Length : record.Length;
+            const finalBreadth = Breadth !== undefined ? Breadth : record.Breadth;
+            if (finalLength && finalBreadth) {
+                calculatedSqFt = parseFloat(finalLength) * parseFloat(finalBreadth);
+            }
+            const rateSqFt = parseFloat(RatePerSqFt !== undefined ? RatePerSqFt : record.RatePerSqFt || 0);
+            const count = parseInt(LabourCount !== undefined ? LabourCount : record.LabourCount || 1);
+            calculatedAmount = (calculatedSqFt !== null ? calculatedSqFt : 1) * rateSqFt * count;
+        }
 
-        await record.update({
+        const updates = {
             PersonType: personTypeName || record.PersonType,
-            ShiftType,
-            ShiftMultiplier: parseFloat(ShiftMultiplier),
-            LabourCount: parseInt(LabourCount),
-            RatePerShift: rate,
+            CalculationMode: mode,
+            LabourCount: parseInt(LabourCount !== undefined ? LabourCount : record.LabourCount),
             CalculatedAmount: calculatedAmount
-        });
+        };
+
+        if (mode === 'Shift') {
+            updates.ShiftType = ShiftType !== undefined ? ShiftType : record.ShiftType;
+            updates.ShiftMultiplier = ShiftMultiplier !== undefined ? parseFloat(ShiftMultiplier) : record.ShiftMultiplier;
+            updates.RatePerShift = rate;
+            updates.Length = null;
+            updates.Breadth = null;
+            updates.SqFt = null;
+            updates.RatePerSqFt = null;
+            updates.SectionId = null;
+        } else {
+            updates.ShiftType = null;
+            updates.ShiftMultiplier = null;
+            updates.RatePerShift = null;
+            updates.Length = Length !== undefined && Length !== '' ? parseFloat(Length) : null;
+            updates.Breadth = Breadth !== undefined && Breadth !== '' ? parseFloat(Breadth) : null;
+            updates.SqFt = calculatedSqFt;
+            updates.RatePerSqFt = RatePerSqFt !== undefined && RatePerSqFt !== '' ? parseFloat(RatePerSqFt) : null;
+            updates.SectionId = SectionId !== undefined && SectionId !== '' ? parseInt(SectionId) : null;
+        }
+
+        await record.update(updates);
 
         await syncMiscAllowances(record.AttendanceSheetId, record.PayeeId, record.SiteId);
 
@@ -562,5 +639,110 @@ async function syncMiscAllowances(sheetId, payeeId, siteId) {
         console.error('syncMiscAllowances Error:', err);
     }
 }
+
+// ============ MATERIAL LIFTING ============
+
+// @route   GET /api/attendance-sheets/lifting/rates
+// @desc    Get all lifting rates
+router.get('/lifting/rates', async (req, res) => {
+    try {
+        const { LiftingChargeRate } = require('../models');
+        const rates = await LiftingChargeRate.findAll({
+            order: [['MaterialType', 'ASC'], ['Floor', 'ASC']]
+        });
+        res.json(rates);
+    } catch (err) {
+        console.error('GET lifting rates error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   POST /api/attendance-sheets/lifting/rates
+// @desc    Update or create a lifting rate
+router.post('/lifting/rates', async (req, res) => {
+    const { MaterialType, Floor, Rate } = req.body;
+    try {
+        const { LiftingChargeRate } = require('../models');
+        let rateRecord = await LiftingChargeRate.findOne({
+            where: { MaterialType, Floor }
+        });
+
+        if (rateRecord) {
+            await rateRecord.update({ Rate: parseFloat(Rate) });
+        } else {
+            rateRecord = await LiftingChargeRate.create({
+                MaterialType,
+                Floor,
+                Rate: parseFloat(Rate)
+            });
+        }
+        res.json(rateRecord);
+    } catch (err) {
+        console.error('POST lifting rates error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   GET /api/attendance-sheets/:id/lifting-records
+// @desc    Get lifting records for an attendance sheet
+router.get('/:id/lifting-records', async (req, res) => {
+    try {
+        const { LiftingRecord, Payee, Site } = require('../models');
+        const records = await LiftingRecord.findAll({
+            where: { AttendanceSheetId: req.params.id },
+            include: [
+                { model: Payee, as: 'Payee', attributes: ['id', 'Name'] },
+                { model: Site, as: 'Site', attributes: ['id', 'SiteName'] }
+            ],
+            order: [['LiftingDate', 'ASC'], ['CreatedAt', 'ASC']]
+        });
+        res.json(records);
+    } catch (err) {
+        console.error('GET lifting records error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   POST /api/attendance-sheets/:id/lifting-records
+// @desc    Create a new lifting record
+router.post('/:id/lifting-records', async (req, res) => {
+    const { PayeeId, SiteId, MaterialType, Floor, Quantity, Rate, LiftingDate } = req.body;
+    try {
+        const { LiftingRecord } = require('../models');
+        const amount = parseFloat(Quantity || 1) * parseFloat(Rate || 0);
+
+        const record = await LiftingRecord.create({
+            AttendanceSheetId: parseInt(req.params.id),
+            PayeeId: parseInt(PayeeId),
+            SiteId: parseInt(SiteId),
+            MaterialType,
+            Floor,
+            Quantity: parseFloat(Quantity),
+            Rate: parseFloat(Rate),
+            Amount: amount,
+            LiftingDate
+        });
+        res.json(record);
+    } catch (err) {
+        console.error('POST lifting record error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   DELETE /api/attendance-sheets/:id/lifting-records/:liftingId
+// @desc    Delete a lifting record
+router.delete('/:id/lifting-records/:liftingId', async (req, res) => {
+    try {
+        const { LiftingRecord } = require('../models');
+        const record = await LiftingRecord.findByPk(req.params.liftingId);
+        if (!record) return res.status(404).json({ msg: 'Lifting record not found' });
+
+        await record.destroy();
+        res.json({ msg: 'Lifting record removed' });
+    } catch (err) {
+        console.error('DELETE lifting record error:', err);
+        res.status(500).json({ msg: 'Server Error' });
+    }
+});
 
 module.exports = router;

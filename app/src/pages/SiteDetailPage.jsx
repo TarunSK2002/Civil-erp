@@ -32,9 +32,17 @@ const SiteDetailPage = () => {
   // Floors / Sections state
   const [sections, setSections] = useState([]);
   const [sectionsLoading, setSectionsLoading] = useState(false);
-  const [newSectionName, setNewSectionName] = useState('');
+  const [showAddSectionModal, setShowAddSectionModal] = useState(false);
   const [editingSectionId, setEditingSectionId] = useState(null);
-  const [editingSectionName, setEditingSectionName] = useState('');
+  const [sectionForm, setSectionForm] = useState({
+    Name: '',
+    Length: '',
+    Breadth: '',
+    Height: '',
+    Area: '',
+    SectionValue: '',
+    RatePerSqFt: ''
+  });
 
   // Projects state
   const [projects, setProjects] = useState([]);
@@ -114,33 +122,75 @@ const SiteDetailPage = () => {
     }
   };
 
-  const handleAddSection = async (e) => {
+  const handleSectionFormChange = (field, value) => {
+    setSectionForm(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-calculate Area if Length & Breadth are changed
+      if (field === 'Length' || field === 'Breadth') {
+        const l = parseFloat(field === 'Length' ? value : updated.Length);
+        const b = parseFloat(field === 'Breadth' ? value : updated.Breadth);
+        if (!isNaN(l) && !isNaN(b)) {
+          updated.Area = String(l * b);
+        } else {
+          updated.Area = '';
+        }
+      }
+      
+      // Auto-calculate SectionValue if Area & RatePerSqFt are changed
+      if (field === 'Area' || field === 'RatePerSqFt' || field === 'Length' || field === 'Breadth') {
+        const areaVal = parseFloat(updated.Area);
+        const rate = parseFloat(updated.RatePerSqFt);
+        if (!isNaN(areaVal) && !isNaN(rate)) {
+          updated.SectionValue = String(areaVal * rate);
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleSaveSection = async (e) => {
     e.preventDefault();
-    if (!newSectionName.trim()) return;
+    if (!sectionForm.Name.trim()) return;
     try {
-      const res = await api.post('/site-sections', {
-        SiteId: id,
-        Name: newSectionName.trim()
+      if (editingSectionId) {
+        const res = await api.put(`/site-sections/${editingSectionId}`, sectionForm);
+        setSections(sections.map(s => s.id === editingSectionId ? res.data : s));
+      } else {
+        const res = await api.post('/site-sections', {
+          ...sectionForm,
+          SiteId: id
+        });
+        setSections([...sections, res.data]);
+      }
+      setShowAddSectionModal(false);
+      setSectionForm({
+        Name: '',
+        Length: '',
+        Breadth: '',
+        Height: '',
+        Area: '',
+        SectionValue: '',
+        RatePerSqFt: ''
       });
-      setSections([...sections, res.data]);
-      setNewSectionName('');
+      setEditingSectionId(null);
     } catch (err) {
-      console.error('Failed to add section', err);
+      console.error('Failed to save section', err);
     }
   };
 
-  const handleUpdateSection = async (sectionId) => {
-    if (!editingSectionName.trim()) return;
-    try {
-      const res = await api.put(`/site-sections/${sectionId}`, {
-        Name: editingSectionName.trim()
-      });
-      setSections(sections.map(s => s.id === sectionId ? res.data : s));
-      setEditingSectionId(null);
-      setEditingSectionName('');
-    } catch (err) {
-      console.error('Failed to update section', err);
-    }
+  const handleEditSectionClick = (sec) => {
+    setEditingSectionId(sec.id);
+    setSectionForm({
+      Name: sec.Name,
+      Length: sec.Length ? String(sec.Length) : '',
+      Breadth: sec.Breadth ? String(sec.Breadth) : '',
+      Height: sec.Height ? String(sec.Height) : '',
+      Area: sec.Area ? String(sec.Area) : '',
+      SectionValue: sec.SectionValue ? String(sec.SectionValue) : '',
+      RatePerSqFt: sec.RatePerSqFt ? String(sec.RatePerSqFt) : ''
+    });
+    setShowAddSectionModal(true);
   };
 
   const handleDeleteSection = async (sectionId) => {
@@ -514,45 +564,40 @@ const SiteDetailPage = () => {
             )}
           </div>
         )}
-
-        {activeTab === 'sections' && (
+         {activeTab === 'sections' && (
           <div className="site-payment-section">
             <div className="site-payment-header">
               <h3>
                 <div className="section-icon" style={{ background: 'rgba(156, 39, 176, 0.1)', color: '#9C27B0' }}><Ruler size={16} /></div>
                 Floors & Sections
               </h3>
-              <form onSubmit={handleAddSection} style={{ display: 'flex', gap: '8px' }}>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Ground Floor, First Floor"
-                  value={newSectionName}
-                  onChange={(e) => setNewSectionName(e.target.value)}
-                  style={{
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    padding: '7px 12px',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px'
-                  }}
-                />
-                <button 
-                  type="submit" 
-                  className="filter-btn"
-                  style={{
-                    background: '#9C27B0',
-                    color: 'white',
-                    borderColor: '#9C27B0',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <Plus size={14} /> Add Floor
-                </button>
-              </form>
+              <button 
+                className="filter-btn"
+                onClick={() => {
+                  setEditingSectionId(null);
+                  setSectionForm({
+                    Name: '',
+                    Length: '',
+                    Breadth: '',
+                    Height: '',
+                    Area: '',
+                    SectionValue: '',
+                    RatePerSqFt: ''
+                  });
+                  setShowAddSectionModal(true);
+                }}
+                style={{
+                  background: '#9C27B0',
+                  color: 'white',
+                  borderColor: '#9C27B0',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Plus size={14} /> New Floor
+              </button>
             </div>
 
             {sectionsLoading ? (
@@ -563,72 +608,44 @@ const SiteDetailPage = () => {
               <table className="site-payment-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '80px' }}>S.No</th>
-                    <th>Name</th>
-                    <th style={{ width: '150px', textAlign: 'right' }}>Actions</th>
+                    <th>Floor Name</th>
+                    <th>Dimensions (L × B × H)</th>
+                    <th>Area (SqFt)</th>
+                    <th>Rate / SqFt</th>
+                    <th>Value</th>
+                    <th style={{ width: '100px', textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sections.map((sec, idx) => (
+                  {sections.map((sec) => (
                     <tr key={sec.id}>
-                      <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
+                      <td style={{ fontWeight: 600 }}>{sec.Name}</td>
                       <td>
-                        {editingSectionId === sec.id ? (
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <input 
-                              type="text"
-                              value={editingSectionName}
-                              onChange={(e) => setEditingSectionName(e.target.value)}
-                              style={{
-                                background: 'var(--bg-input)',
-                                border: '1px solid var(--border)',
-                                borderRadius: '4px',
-                                padding: '4px 8px',
-                                color: 'var(--text-primary)',
-                                fontSize: '13px'
-                              }}
-                            />
-                            <button 
-                              className="tab-action-btn"
-                              style={{ color: 'var(--success)', background: 'none', border: 'none', cursor: 'pointer' }}
-                              onClick={() => handleUpdateSection(sec.id)}
-                            >
-                              <Check size={16} />
-                            </button>
-                            <button 
-                              className="tab-action-btn"
-                              style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer' }}
-                              onClick={() => setEditingSectionId(null)}
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        ) : (
-                          <span>{sec.Name}</span>
-                        )}
+                        {sec.Length || sec.Breadth || sec.Height 
+                          ? `${sec.Length || 0} × ${sec.Breadth || 0} × ${sec.Height || 0}`
+                          : '—'
+                        }
                       </td>
+                      <td>{sec.Area ? `${sec.Area} SqFt` : '—'}</td>
+                      <td>{sec.RatePerSqFt ? fmt(sec.RatePerSqFt) : '—'}</td>
+                      <td style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmt(sec.SectionValue)}</td>
                       <td style={{ textAlign: 'right' }}>
-                        {editingSectionId !== sec.id && (
-                          <div style={{ display: 'inline-flex', gap: '12px' }}>
-                            <button 
-                              className="tab-action-btn"
-                              style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                              onClick={() => {
-                                setEditingSectionId(sec.id);
-                                setEditingSectionName(sec.Name);
-                              }}
-                            >
-                              <Edit size={14} />
-                            </button>
-                            <button 
-                              className="tab-action-btn"
-                              style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                              onClick={() => handleDeleteSection(sec.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        )}
+                        <div style={{ display: 'inline-flex', gap: '12px' }}>
+                          <button 
+                            className="tab-action-btn"
+                            style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            onClick={() => handleEditSectionClick(sec)}
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button 
+                            className="tab-action-btn"
+                            style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            onClick={() => handleDeleteSection(sec.id)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -636,7 +653,7 @@ const SiteDetailPage = () => {
               </table>
             ) : (
               <div className="site-payment-empty">
-                No floors/sections added yet. Add ground floor, first floor, etc. to track material purchases and work values by location.
+                No floors/sections added yet. Click "New Floor" to track areas, values, and labor sq-ft rates.
               </div>
             )}
           </div>
@@ -767,18 +784,22 @@ const SiteDetailPage = () => {
               <div className="form-row">
                 <div className="form-group">
                   <label>Work Type</label>
-                  <select 
+                  <input 
+                    type="text"
+                    list="workTypes"
                     value={projectForm.WorkType}
                     onChange={(e) => setProjectForm({ ...projectForm, WorkType: e.target.value })}
-                  >
-                    <option value="New Construction">New Construction</option>
-                    <option value="Interior Works">Interior Works</option>
-                    <option value="Renovation">Renovation</option>
-                    <option value="Painting Work">Painting Work</option>
-                    <option value="Plumbing & Electrical">Plumbing & Electrical</option>
-                    <option value="Wood / Carpentry">Wood / Carpentry</option>
-                    <option value="Other">Other</option>
-                  </select>
+                    placeholder="Select or type work type..."
+                  />
+                  <datalist id="workTypes">
+                    <option value="New Construction" />
+                    <option value="Interior Works" />
+                    <option value="Renovation" />
+                    <option value="Painting Work" />
+                    <option value="Plumbing & Electrical" />
+                    <option value="Wood / Carpentry" />
+                    <option value="Other" />
+                  </datalist>
                 </div>
 
                 <div className="form-group">
@@ -839,6 +860,105 @@ const SiteDetailPage = () => {
               <div className="modal-actions">
                 <button type="button" className="btn-cancel" onClick={() => setShowAddProjectModal(false)}>Cancel</button>
                 <button type="submit" className="btn-submit">Save Project</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Floor/Section Modal */}
+      {showAddSectionModal && (
+        <div className="site-detail-modal-overlay">
+          <div className="site-detail-modal">
+            <div className="modal-header">
+              <h2>{editingSectionId ? 'Edit Floor / Section' : 'New Floor / Section'}</h2>
+              <button className="close-btn" onClick={() => setShowAddSectionModal(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveSection} className="modal-form">
+              <div className="form-group">
+                <label>Floor/Section Name *</label>
+                <input 
+                  type="text"
+                  required
+                  value={sectionForm.Name}
+                  onChange={(e) => handleSectionFormChange('Name', e.target.value)}
+                  placeholder="e.g. Ground Floor, First Floor, Slab Beam"
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Length (ft)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    value={sectionForm.Length}
+                    onChange={(e) => handleSectionFormChange('Length', e.target.value)}
+                    placeholder="Length"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Breadth (ft)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    value={sectionForm.Breadth}
+                    onChange={(e) => handleSectionFormChange('Breadth', e.target.value)}
+                    placeholder="Breadth"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Height (ft)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    value={sectionForm.Height}
+                    onChange={(e) => handleSectionFormChange('Height', e.target.value)}
+                    placeholder="Height"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Area (SqFt) (Auto-calculated)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    value={sectionForm.Area}
+                    onChange={(e) => handleSectionFormChange('Area', e.target.value)}
+                    placeholder="Area"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Rate per SqFt (₹)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    value={sectionForm.RatePerSqFt}
+                    onChange={(e) => handleSectionFormChange('RatePerSqFt', e.target.value)}
+                    placeholder="e.g. 15"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Floor Value (₹) (Auto-calculated)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    value={sectionForm.SectionValue}
+                    onChange={(e) => handleSectionFormChange('SectionValue', e.target.value)}
+                    placeholder="Value"
+                  />
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setShowAddSectionModal(false)}>Cancel</button>
+                <button type="submit" className="btn-submit">Save Floor</button>
               </div>
             </form>
           </div>

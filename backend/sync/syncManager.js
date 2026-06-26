@@ -8,7 +8,7 @@ let syncIntervalId = null;
 let onStatusChangeCallback = null;
 
 // Target backend sync endpoint from environment variables
-const RENDER_API_URL = process.env.RENDER_API_URL || 'http://localhost:5000/api';
+const RENDER_API_URL = process.env.RENDER_API_URL || 'https://civil-erp.onrender.com/api';
 
 async function checkInternet() {
   try {

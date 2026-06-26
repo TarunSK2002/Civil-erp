@@ -21,7 +21,8 @@ function startBackend() {
             ...process.env,
             ELECTRON_RUN_AS_NODE: '1',
             DB_DIALECT: 'sqlite',
-            USER_DATA_PATH: app.getPath('userData')
+            USER_DATA_PATH: app.getPath('userData'),
+            RENDER_API_URL: 'https://civil-erp.onrender.com/api'
         },
         stdio: 'pipe'
     });

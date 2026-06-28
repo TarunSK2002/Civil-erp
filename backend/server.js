@@ -102,7 +102,7 @@ app.post('/api/sync', async (req, res) => {
             
             // Fallback: If not found by uuid, check if a record with the same primary key exists
             if (!existingRecord) {
-                const pkValue = payload.Id || payload.id;
+                const pkValue = payload ? (payload.Id || payload.id) : null;
                 if (pkValue) {
                     existingRecord = await Model.findByPk(pkValue);
                     if (existingRecord) {
@@ -114,18 +114,18 @@ app.post('/api/sync', async (req, res) => {
 
             if (existingRecord) {
                 // Update
-                const updatePayload = { ...payload };
+                const updatePayload = payload ? { ...payload } : {};
                 delete updatePayload.id;
                 delete updatePayload.Id;
                 await existingRecord.update(updatePayload);
             } else {
                 // Create
-                await Model.create({ ...payload, uuid });
+                await Model.create({ ...(payload || {}), uuid });
             }
         } else if (action === 'DELETE') {
             let existingRecord = await Model.findOne({ where: { uuid } });
             if (!existingRecord) {
-                const pkValue = payload.Id || payload.id;
+                const pkValue = payload ? (payload.Id || payload.id) : null;
                 if (pkValue) {
                     existingRecord = await Model.findByPk(pkValue);
                 }

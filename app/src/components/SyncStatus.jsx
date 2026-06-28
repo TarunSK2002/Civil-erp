@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Cloud, CloudOff, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, AlertCircle, CheckCircle2, Download } from 'lucide-react';
 import { syncApi } from '../api/syncApi';
 
 const SyncStatus = () => {
@@ -22,17 +22,32 @@ const SyncStatus = () => {
     // Initial fetch
     fetchStatus();
 
+    // Close dropdown on click outside
+    const handleClickOutside = (e) => {
+      const container = document.getElementById('sync-status-container');
+      if (container && !container.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
+    let unsubscribe;
+    let interval;
     // Listen to real-time IPC events from Electron Main
     if (window.electronAPI && window.electronAPI.onSyncStatusChange) {
-      const unsubscribe = window.electronAPI.onSyncStatusChange((data) => {
+      unsubscribe = window.electronAPI.onSyncStatusChange((data) => {
         setStatus(data);
       });
-      return () => unsubscribe();
     } else {
       // Fallback: poll every 10 seconds in browser/dev mode
-      const interval = setInterval(fetchStatus, 10000);
-      return () => clearInterval(interval);
+      interval = setInterval(fetchStatus, 10000);
     }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (unsubscribe) unsubscribe();
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   const handleSyncNow = async (e) => {
@@ -49,6 +64,24 @@ const SyncStatus = () => {
       setSyncing(false);
     }
   };
+
+  const handlePullNow = async (e) => {
+    e.stopPropagation();
+    if (syncing || !status.isOnline) return;
+    setSyncing(true);
+    try {
+      const res = await syncApi.triggerPull();
+      setStatus({ isOnline: res.isOnline, pendingCount: res.pendingCount, error: null });
+      // Reload page to refresh all React router views with the newly pulled data
+      window.location.reload();
+    } catch (err) {
+      console.error('Manual pull failed:', err);
+      setStatus(prev => ({ ...prev, error: 'Pull failed: Connection issue' }));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
 
   const isOnline = status.isOnline;
   const pending = status.pendingCount;
@@ -75,12 +108,12 @@ const SyncStatus = () => {
 
   return (
     <div 
+      id="sync-status-container"
       style={{ position: 'relative' }}
-      onMouseEnter={() => setShowDropdown(true)}
-      onMouseLeave={() => setShowDropdown(false)}
     >
       {/* TopBar Interactive Badge */}
       <div 
+        onClick={() => setShowDropdown(prev => !prev)}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -184,7 +217,7 @@ const SyncStatus = () => {
             </p>
           )}
 
-          <button
+           <button
             onClick={handleSyncNow}
             disabled={syncing || !isOnline || pending === 0}
             style={{
@@ -206,6 +239,31 @@ const SyncStatus = () => {
           >
             <RefreshCw size={14} className={syncing ? 'spin-anim' : ''} />
             {syncing ? 'Synchronizing...' : 'Force Sync Now'}
+          </button>
+
+          <button
+            onClick={handlePullNow}
+            disabled={syncing || !isOnline}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: isOnline ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid var(--border)',
+              backgroundColor: isOnline ? 'rgba(76, 175, 80, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+              color: isOnline ? '#4CAF50' : 'var(--text-muted)',
+              cursor: isOnline && !syncing ? 'pointer' : 'not-allowed',
+              fontWeight: '700',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              marginTop: '4px'
+            }}
+          >
+            <Download size={14} className={syncing ? 'spin-anim' : ''} />
+            {syncing ? 'Pulling data...' : 'Pull Data from Cloud'}
           </button>
         </div>
       )}

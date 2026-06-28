@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Table2, ChevronDown, Check, X, Loader2, Trash2,
   Calendar, CreditCard, FileSpreadsheet, Users, Building2,
-  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, Tag, RotateCcw
+  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, Tag, RotateCcw,
+  Eye, EyeOff
 } from 'lucide-react';
 import api from '../api/axios';
 import './WeeklyPaySheetPage.css';
@@ -18,6 +19,13 @@ const WeeklyPaySheetPage = () => {
 
   // Filter
   const [statusFilter, setStatusFilter] = useState('All');
+
+  // Summary display preference
+  const [showSummary, setShowSummary] = useState(() => {
+    const saved = localStorage.getItem('wps_show_summary');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
 
   // Editing
   const [editingCell, setEditingCell] = useState(null); // "payeeId_siteId"
@@ -652,7 +660,21 @@ const WeeklyPaySheetPage = () => {
           <h1>Weekly Pay Sheet</h1>
           <p>Track and manage weekly project payments — like your Excel, but better.</p>
         </div>
-        <div className="wps-header-actions">
+        <div className="wps-header-actions" style={{ display: 'flex', gap: '8px' }}>
+          {sheetData && (
+            <button 
+              className="wps-btn wps-btn-secondary" 
+              onClick={() => setShowSummary(prev => {
+                const next = !prev;
+                localStorage.setItem('wps_show_summary', JSON.stringify(next));
+                return next;
+              })}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              {showSummary ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showSummary ? 'Hide Summary' : 'Show Summary'}
+            </button>
+          )}
           <button className="wps-btn wps-btn-primary" onClick={() => setShowNewSheetModal(true)}>
             <Plus size={18} /> New Sheet
           </button>
@@ -660,7 +682,7 @@ const WeeklyPaySheetPage = () => {
       </div>
 
       {/* Summary Cards */}
-      {sheetData && (
+      {sheetData && showSummary && (
         <div className="wps-summary">
           <div className="wps-summary-card total">
             <div className="wps-summary-label">Payee Total</div>
@@ -774,6 +796,7 @@ const WeeklyPaySheetPage = () => {
         )}
 
         {/* Filters */}
+        {/* 
         <div className="wps-filters">
           {['All', 'Labour', 'Supplier', 'Pending', 'Paid'].map(f => (
             <button
@@ -789,6 +812,7 @@ const WeeklyPaySheetPage = () => {
             </button>
           ))}
         </div>
+        */}
       </div>
 
       {/* Grid or Empty State */}

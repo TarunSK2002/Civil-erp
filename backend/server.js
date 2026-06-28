@@ -10,7 +10,6 @@ process.env.DB_HOST = process.env.DB_HOST || '127.0.0.1';
 process.env.PORT = process.env.PORT || 5000;
 
 const { sequelize } = require('./models');
-const ensureDatabaseExists = require('./config/dbInit');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,6 +65,18 @@ app.post('/api/sync-trigger', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+app.post('/api/sync-pull', async (req, res) => {
+    try {
+        await syncManager.pullNow();
+        const isOnline = syncManager.isOnlineStatus();
+        const pendingCount = await syncManager.getPendingCount();
+        res.json({ success: true, isOnline, pendingCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // Generic database sync endpoint
 app.post('/api/sync', async (req, res) => {
@@ -162,211 +173,60 @@ app.get('/api/sync/pull', async (req, res) => {
 
 // Database Initialization & Server Start
 async function startServer() {
-    const isSqlite = process.env.DB_DIALECT === 'sqlite';
-
-    // 1. Ensure DB exists (only for MySQL)
-    if (!isSqlite) {
-        await ensureDatabaseExists();
-    }
-
     try {
-        // 2. Connect and Sync
+        // 1. Connect and Sync
         await sequelize.authenticate();
         console.log('Database connected...');
-
-        // Safe schema migrations — each silently skips if column already exists or table does not exist yet
-        const migrations = [
-            // Schema migrations (V1 -> V2)
-            "ALTER TABLE weekly_pay_sheets ADD COLUMN SelectedPayeeIds TEXT NULL;",
-            "ALTER TABLE weekly_pay_sheets ADD COLUMN SelectedSiteIds TEXT NULL;",
-            "ALTER TABLE payments ADD COLUMN PayeeId INT NULL;",
-            "ALTER TABLE labours ADD COLUMN PayeeId INT NULL;",
-            "ALTER TABLE sites ADD COLUMN Progress DECIMAL(5,2) DEFAULT 0;",
-            "ALTER TABLE site_materials ADD COLUMN Amount DECIMAL(18,2) DEFAULT 0;",
-            "ALTER TABLE site_materials ADD COLUMN DealerName VARCHAR(100) DEFAULT '';",
-            "ALTER TABLE sites ADD COLUMN NextMilestone VARCHAR(255) DEFAULT '';",
-            "ALTER TABLE materials DROP COLUMN Rate;",
-
-            // Schema migrations (V2 -> V3)
-            "ALTER TABLE attendance_records ADD COLUMN PersonType VARCHAR(30) NOT NULL DEFAULT 'Mason';",
-            "ALTER TABLE person_types ADD COLUMN DailyRate DECIMAL(18,2) NOT NULL DEFAULT 0;",
-            "ALTER TABLE materials ADD COLUMN DealerName VARCHAR(100) DEFAULT '';",
-            "ALTER TABLE materials ADD COLUMN MobileNo VARCHAR(15) DEFAULT '';",
-            "ALTER TABLE materials ADD COLUMN AccountNo VARCHAR(30) DEFAULT '';",
-            "ALTER TABLE materials ADD COLUMN MaterialTypeId INT DEFAULT NULL;",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN IsSkipped TINYINT(1) NOT NULL DEFAULT 0;",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN SkippedToSheetId INT DEFAULT NULL;",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN IsExtraPayment TINYINT(1) NOT NULL DEFAULT 0;",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN ExtraPaymentDescription VARCHAR(255) DEFAULT NULL;",
-            "ALTER TABLE weekly_pay_sheets ADD COLUMN Status VARCHAR(20) NOT NULL DEFAULT 'Open';",
-            "ALTER TABLE material_types ADD COLUMN Price DECIMAL(18,2) NOT NULL DEFAULT 0;",
-            "ALTER TABLE material_types ADD COLUMN DefaultUnit VARCHAR(50) DEFAULT 'nos';",
-            `CREATE TABLE IF NOT EXISTS master_settings (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                SettingKey VARCHAR(100) NOT NULL UNIQUE,
-                SettingValue VARCHAR(255) NOT NULL DEFAULT '',
-                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            );`,
-            `INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50');`,
-
-            // Fix site_materials foreign key constraint mismatch (drop developer & client constraint names)
-            "ALTER TABLE site_materials DROP FOREIGN KEY site_materials_ibfk_14;",
-            "ALTER TABLE site_materials DROP FOREIGN KEY site_materials_ibfk_6;",
-            "ALTER TABLE site_materials ADD CONSTRAINT fk_site_materials_material_type FOREIGN KEY (MaterialId) REFERENCES material_types (Id) ON DELETE CASCADE ON UPDATE CASCADE;",
-
-            // Schema migrations (V3 -> V4)
-            "ALTER TABLE material_types ADD COLUMN CalculationMode VARCHAR(30) DEFAULT 'Manual';",
-            "ALTER TABLE site_materials ADD COLUMN Length DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE site_materials ADD COLUMN Breadth DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE site_materials ADD COLUMN SqFt DECIMAL(12,2) DEFAULT NULL;",
-            "ALTER TABLE site_materials ADD COLUMN WastagePercent DECIMAL(5,2) DEFAULT 0;",
-            "ALTER TABLE site_materials ADD COLUMN RatePerUnit DECIMAL(18,2) DEFAULT 0;",
-            "ALTER TABLE site_materials ADD COLUMN CalculationMode VARCHAR(30) DEFAULT 'Manual';",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN SourceType VARCHAR(30) DEFAULT 'Attendance';",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN SourceMaterialIds TEXT DEFAULT NULL;",
-            `CREATE TABLE IF NOT EXISTS action_logs (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                WeeklyPaySheetId INT NOT NULL,
-                ActionType VARCHAR(50) NOT NULL,
-                EntityType VARCHAR(30) NOT NULL,
-                EntityId INT DEFAULT NULL,
-                BeforeData JSON DEFAULT NULL,
-                AfterData JSON DEFAULT NULL,
-                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                IsUndone TINYINT(1) NOT NULL DEFAULT 0,
-                INDEX idx_action_logs_sheet (WeeklyPaySheetId),
-                INDEX idx_action_logs_created (CreatedAt)
-            );`,
-            `CREATE TABLE IF NOT EXISTS site_sections (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                SiteId INT NOT NULL,
-                Name VARCHAR(100) NOT NULL,
-                SortOrder INT DEFAULT 0,
-                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (SiteId) REFERENCES sites(Id) ON DELETE CASCADE
-            );`,
-            `CREATE TABLE IF NOT EXISTS site_projects (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                SiteId INT NOT NULL,
-                ProjectName VARCHAR(200) NOT NULL,
-                WorkType VARCHAR(100) DEFAULT 'New Construction',
-                StartDate DATE DEFAULT NULL,
-                EndDate DATE DEFAULT NULL,
-                Status VARCHAR(30) DEFAULT 'In Progress',
-                QuotedValue DECIMAL(18,2) DEFAULT 0,
-                Notes VARCHAR(500) DEFAULT NULL,
-                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (SiteId) REFERENCES sites(Id) ON DELETE CASCADE
-            );`,
-            "ALTER TABLE site_materials ADD COLUMN SectionId INT DEFAULT NULL;",
-            "ALTER TABLE site_materials ADD COLUMN ProjectId INT DEFAULT NULL;",
-            "ALTER TABLE attendance_records ADD COLUMN SectionId INT DEFAULT NULL;",
-            "ALTER TABLE attendance_records ADD COLUMN ProjectId INT DEFAULT NULL;",
-            "ALTER TABLE weekly_pay_sheet_items ADD COLUMN ProjectId INT DEFAULT NULL;",
-            
-            // Schema migrations (V4 -> V5)
-            "ALTER TABLE site_sections ADD COLUMN Length DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE site_sections ADD COLUMN Breadth DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE site_sections ADD COLUMN Height DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE site_sections ADD COLUMN Area DECIMAL(12,2) DEFAULT NULL;",
-            "ALTER TABLE site_sections ADD COLUMN SectionValue DECIMAL(18,2) DEFAULT 0;",
-            "ALTER TABLE site_sections ADD COLUMN RatePerSqFt DECIMAL(18,2) DEFAULT NULL;",
-            "ALTER TABLE attendance_records ADD COLUMN CalculationMode VARCHAR(30) DEFAULT 'Shift';",
-            "ALTER TABLE attendance_records ADD COLUMN Length DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE attendance_records ADD COLUMN Breadth DECIMAL(10,2) DEFAULT NULL;",
-            "ALTER TABLE attendance_records ADD COLUMN SqFt DECIMAL(12,2) DEFAULT NULL;",
-            "ALTER TABLE attendance_records ADD COLUMN RatePerSqFt DECIMAL(18,2) DEFAULT NULL;",
-            `CREATE TABLE IF NOT EXISTS lifting_charge_rates (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                MaterialType VARCHAR(50) NOT NULL,
-                Floor VARCHAR(50) NOT NULL,
-                Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
-                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY idx_lifting_rates_mat_floor (MaterialType, Floor)
-            );`,
-            `INSERT IGNORE INTO lifting_charge_rates (MaterialType, Floor, Rate) VALUES
-                ('M.Sand', 'G.Floor', 1700.00),
-                ('M.Sand', '1st floor', 2200.00),
-                ('M.Sand', '2nd floor', 3200.00),
-                ('M.Sand', '3rd floor', 4200.00),
-                ('Jally', 'G.Floor', 2000.00),
-                ('Jally', '1st floor', 2600.00),
-                ('Jally', '2nd floor', 3600.00),
-                ('Jally', '3rd floor', 4600.00),
-                ('Sengal', 'G.Floor', 0.90),
-                ('Sengal', '1st floor', 1.30),
-                ('Sengal', '2nd floor', 2.20),
-                ('Sengal', '3rd floor', 3.60);`,
-            `CREATE TABLE IF NOT EXISTS lifting_records (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                AttendanceSheetId INT NOT NULL,
-                PayeeId INT NOT NULL,
-                SiteId INT NOT NULL,
-                MaterialType VARCHAR(50) NOT NULL,
-                Floor VARCHAR(50) NOT NULL,
-                Quantity DECIMAL(12,2) NOT NULL DEFAULT 1,
-                Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
-                Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
-                LiftingDate DATE NOT NULL,
-                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (AttendanceSheetId) REFERENCES attendance_sheets(Id) ON DELETE CASCADE,
-                FOREIGN KEY (PayeeId) REFERENCES payees(Id) ON DELETE CASCADE,
-                FOREIGN KEY (SiteId) REFERENCES sites(Id) ON DELETE CASCADE
-            );`
-        ];
-        
-        if (!isSqlite) {
-            for (const sql of migrations) {
-                try { await sequelize.query(sql); } catch (e) { /* column already exists / table does not exist / error ignored */ }
-            }
-
-            // Dynamically ensure every syncable table has uuid and is_deleted columns in MySQL
-            const dbModels = require('./models');
-            for (const modelKey of Object.keys(dbModels)) {
-                if (modelKey === 'sequelize' || modelKey === 'SyncQueue' || modelKey === 'User' || modelKey === 'ActionLog' || modelKey === 'LiftingChargeRate') {
-                    continue;
-                }
-                const Model = dbModels[modelKey];
-                const tableName = Model.tableName;
-                
-                // Add uuid column if not exists (nullable is safe for existing tables with rows)
-                try {
-                    await sequelize.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`uuid\` CHAR(36) NULL;`);
-                    console.log(`Added uuid column to MySQL table: ${tableName}`);
-                } catch (e) {
-                    // Ignore column already exists or other errors
-                }
-                
-                // Add is_deleted column if not exists
-                try {
-                    await sequelize.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`is_deleted\` TINYINT(1) NOT NULL DEFAULT 0;`);
-                    console.log(`Added is_deleted column to MySQL table: ${tableName}`);
-                } catch (e) {
-                    // Ignore column already exists or other errors
-                }
-            }
-        }
 
         // Use standard sync to avoid foreign key drop errors
         await sequelize.sync();
         console.log('Database synchronized.');
 
-        // Initialize Sync Queue & Start background sync loop if SQLite is local database
+        // Ensure master_settings table exists and is seeded with defaults
+        const isSqlite = sequelize.options.dialect === 'sqlite';
         if (isSqlite) {
-            const SyncQueue = require('./sync/syncQueue');
-            await SyncQueue.sync();
-            
-            // Set up IPC status callback to notify Electron main process
-            syncManager.setStatusCallback((data) => {
-                if (process.send) {
-                    process.send({ type: 'sync-status-changed', data });
-                }
-            });
-
-            // Start check loop every 15 seconds
-            syncManager.startSyncLoop(15000);
-            console.log('Background sync manager loop started.');
+            await sequelize.query(`
+                CREATE TABLE IF NOT EXISTS master_settings (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    SettingKey VARCHAR(100) NOT NULL UNIQUE,
+                    SettingValue VARCHAR(255) NOT NULL DEFAULT '',
+                    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20');`);
+            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('BusExpense', '50');`);
+            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('LatestAppVersion', '2.6.0');`);
+            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('UpdateLink', 'https://drive.google.com');`);
+            console.log('SQLite master_settings table verified/created.');
+        } else {
+            await sequelize.query(`
+                CREATE TABLE IF NOT EXISTS master_settings (
+                    Id INT AUTO_INCREMENT PRIMARY KEY,
+                    SettingKey VARCHAR(100) NOT NULL UNIQUE,
+                    SettingValue VARCHAR(255) NOT NULL DEFAULT '',
+                    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                );
+            `);
+            await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '2.6.0'), ('UpdateLink', 'https://drive.google.com');`);
+            console.log('MySQL master_settings table verified/created.');
         }
+
+
+        // 2. Initialize Sync Queue & Start background sync loop
+        const SyncQueue = require('./sync/syncQueue');
+        await SyncQueue.sync();
+        
+        // Set up IPC status callback to notify Electron main process
+        syncManager.setStatusCallback((data) => {
+            if (process.send) {
+                process.send({ type: 'sync-status-changed', data });
+            }
+        });
+
+        // Start check loop every 15 seconds
+        syncManager.startSyncLoop(15000);
+        console.log('Background sync manager loop started.');
+
 
         // 3. Ensure Default Admin User exists
         const { User } = require('./models');

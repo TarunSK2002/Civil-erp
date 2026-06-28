@@ -50,18 +50,11 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const { Title, WeekStartDate, WeekEndDate } = req.body;
     try {
-        // Auto-include active sites
-        const activeSites = await Site.findAll({
-            where: { Status: { [Op.in]: ['Upcoming', 'In Progress'] } },
-            attributes: ['id']
-        });
-        const selectedSiteIds = activeSites.map(s => s.id);
-
         const sheet = await AttendanceSheet.create({
             Title,
             WeekStartDate,
             WeekEndDate,
-            SelectedSiteIds: selectedSiteIds,
+            SelectedSiteIds: [],
             SelectedPayeeIds: []
         });
 

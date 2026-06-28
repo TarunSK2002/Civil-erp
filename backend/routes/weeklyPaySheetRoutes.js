@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, SiteMaterial, MaterialType, ActionLog, sequelize } = require('../models');
+const { WeeklyPaySheet, WeeklyPaySheetItem, Payee, Site, Payment, Client, SiteMaterial, MaterialType, ActionLog, AttendanceRecord, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // Helper: Synchronize dealer payee rows and grid items from site_materials
@@ -124,30 +124,77 @@ async function syncDealerItems(sheet, transaction = null) {
 }
 
 
+// Helper: Get sites with pending payments (derived from attendance records or material purchases) in the week ending on weekDate
+async function getSitesWithPaymentsDue(weekDateVal) {
+    const weekEndDate = new Date(weekDateVal);
+    const weekStartDate = new Date(weekEndDate);
+    weekStartDate.setDate(weekEndDate.getDate() - 6);
+    weekStartDate.setHours(0, 0, 0, 0);
+    weekEndDate.setHours(23, 59, 59, 999);
+
+    const startStr = weekStartDate.toISOString().split('T')[0];
+    const endStr = weekEndDate.toISOString().split('T')[0];
+
+    // 1. Fetch site IDs from AttendanceRecord
+    const attendanceRecords = await AttendanceRecord.findAll({
+        attributes: ['SiteId'],
+        where: {
+            AttendanceDate: {
+                [Op.between]: [startStr, endStr]
+            }
+        },
+        raw: true
+    });
+    const attendanceSiteIds = attendanceRecords.map(r => r.SiteId).filter(Boolean);
+
+    // 2. Fetch site IDs from SiteMaterial (purchases)
+    const siteMaterials = await SiteMaterial.findAll({
+        attributes: ['SiteId'],
+        where: {
+            PurchaseDate: {
+                [Op.between]: [weekStartDate, weekEndDate]
+            }
+        },
+        raw: true
+    });
+    const purchaseSiteIds = siteMaterials.map(m => m.SiteId).filter(Boolean);
+
+    // Merge lists and return distinct site IDs
+    return [...new Set([...attendanceSiteIds, ...purchaseSiteIds])];
+}
+
+
 // ============ SHEET CRUD ============
 
 // @route   GET /api/weekly-pay-sheets
 // @desc    List all sheets
 router.get('/', async (req, res) => {
     try {
+        const isSqlite = sequelize.options.dialect === 'sqlite';
+        const foreignKey = isSqlite ? 'weekly_pay_sheet_id' : 'WeeklyPaySheetId';
+        const primaryKey = isSqlite ? 'id' : 'Id';
+        const amountField = isSqlite ? 'amount' : 'Amount';
+        const statusField = isSqlite ? 'payment_status' : 'PaymentStatus';
+
         const sheets = await WeeklyPaySheet.findAll({
             order: [['WeekDate', 'DESC']],
             attributes: [
                 'id', 'Title', 'WeekDate', 'Status', 'CreatedAt', 'SelectedPayeeIds', 'SelectedSiteIds',
                 [
-                    sequelize.literal('(SELECT COUNT(*) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.WeeklyPaySheetId = WeeklyPaySheet.Id)'),
+                    sequelize.literal(`(SELECT COUNT(*) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.${foreignKey} = WeeklyPaySheet.${primaryKey})`),
                     'itemCount'
                 ],
                 [
-                    sequelize.literal('(SELECT COALESCE(SUM(Amount), 0) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.WeeklyPaySheetId = WeeklyPaySheet.Id)'),
+                    sequelize.literal(`(SELECT COALESCE(SUM(${amountField}), 0) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.${foreignKey} = WeeklyPaySheet.${primaryKey})`),
                     'totalAmount'
                 ],
                 [
-                    sequelize.literal('(SELECT COALESCE(SUM(Amount), 0) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.WeeklyPaySheetId = WeeklyPaySheet.Id AND weekly_pay_sheet_items.PaymentStatus = "Paid")'),
+                    sequelize.literal(`(SELECT COALESCE(SUM(${amountField}), 0) FROM weekly_pay_sheet_items WHERE weekly_pay_sheet_items.${foreignKey} = WeeklyPaySheet.${primaryKey} AND weekly_pay_sheet_items.${statusField} = 'Paid')`),
                     'paidAmount'
                 ]
             ]
         });
+
 
         const result = sheets.map(sheet => {
             const itemCount = parseInt(sheet.getDataValue('itemCount') || 0);
@@ -181,14 +228,8 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const { Title, WeekDate } = req.body;
     try {
-        // Find active sites to auto-include
-        const activeSites = await Site.findAll({
-            where: {
-                Status: { [Op.in]: ['Upcoming', 'In Progress'] }
-            },
-            attributes: ['id']
-        });
-        const selectedSiteIds = activeSites.map(s => s.id);
+        // Find sites with payments due in this week (from attendance and purchase tables)
+        const selectedSiteIds = await getSitesWithPaymentsDue(WeekDate);
 
         const sheet = await WeeklyPaySheet.create({
             Title,
@@ -197,7 +238,7 @@ router.post('/', async (req, res) => {
             SelectedPayeeIds: []
         });
 
-        console.log(`Created sheet ${sheet.id} with ${selectedSiteIds.length} sites`);
+        console.log(`Created sheet ${sheet.id} with ${selectedSiteIds.length} dynamically selected sites`);
         res.json(sheet);
     } catch (err) {
         console.error('Sheet creation error:', err);
@@ -220,9 +261,10 @@ router.get('/:id', async (req, res) => {
             include: [{
                 model: WeeklyPaySheetItem,
                 as: 'Items',
+                required: false,
                 include: [
-                    { model: Payee, as: 'Payee', attributes: ['id', 'Name', 'Type'] },
-                    { model: Site, as: 'Site', attributes: ['id', 'SiteName', 'SiteValue'] }
+                    { model: Payee, as: 'Payee', attributes: ['id', 'Name', 'Type'], required: false },
+                    { model: Site, as: 'Site', attributes: ['id', 'SiteName', 'SiteValue'], required: false }
                 ]
             }]
         });
@@ -1058,35 +1100,84 @@ router.post('/:id/import-attendance', async (req, res) => {
         const weeklySheet = await WeeklyPaySheet.findByPk(req.params.id);
         if (!weeklySheet) return res.status(404).json({ msg: 'Weekly sheet not found' });
 
-        const weekDate = new Date(weeklySheet.WeekDate);
+        const dateStr = typeof weeklySheet.WeekDate === 'string'
+            ? weeklySheet.WeekDate
+            : weeklySheet.WeekDate.toISOString().split('T')[0];
 
-        // Find matching attendance sheet (where weeklySheet.WeekDate falls between start and end)
-        const { AttendanceSheet, AttendanceRecord, AttendanceMisc, LiftingRecord } = require('../models');
-        const attendanceSheet = await AttendanceSheet.findOne({
+        const weekEndDate = new Date(weeklySheet.WeekDate);
+        const weekStartDate = new Date(weekEndDate);
+        weekStartDate.setDate(weekEndDate.getDate() - 6);
+        weekStartDate.setHours(0, 0, 0, 0);
+        weekEndDate.setHours(23, 59, 59, 999);
+
+        // Fetch material purchases for this week
+        const purchases = await SiteMaterial.findAll({
             where: {
-                WeekStartDate: { [Op.lte]: weekDate },
-                WeekEndDate: { [Op.gte]: weekDate }
+                PurchaseDate: { [Op.between]: [weekStartDate, weekEndDate] }
             }
         });
 
-        if (!attendanceSheet) return res.status(404).json({ msg: 'No matching attendance sheet found for this week' });
+        const materialPayeeIds = [];
+        const materialSiteIds = [...new Set(purchases.map(p => p.SiteId).filter(Boolean))].map(id => parseInt(id));
 
-        // Get all records, miscs, and lifting records for this attendance sheet
-        const records = await AttendanceRecord.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
-        const miscs = await AttendanceMisc.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
-        const liftingRecords = await LiftingRecord.findAll({ where: { AttendanceSheetId: attendanceSheet.id } });
+        for (const p of purchases) {
+            const dealer = (p.DealerName || '').trim();
+            if (!dealer) continue;
 
-        // Update WeeklyPaySheet's selected lists to include those found in attendance and lifting
+            let payee = await Payee.findOne({
+                where: sequelize.where(sequelize.fn('lower', sequelize.col('Name')), dealer.toLowerCase())
+            });
+
+            if (!payee) {
+                payee = await Payee.create({
+                    Name: dealer,
+                    Type: 'Supplier'
+                });
+                console.log(`Auto-created Supplier Payee on Import: ${dealer} (${payee.id})`);
+            }
+            materialPayeeIds.push(payee.id);
+        }
+
+        const uniqueMaterialPayeeIds = [...new Set(materialPayeeIds)];
+
+        // Find matching attendance sheets (where weeklySheet.WeekDate falls between start and end)
+        const { AttendanceSheet, AttendanceRecord, AttendanceMisc, LiftingRecord } = require('../models');
+        const attendanceSheets = await AttendanceSheet.findAll({
+            where: {
+                WeekStartDate: { [Op.lte]: dateStr },
+                WeekEndDate: { [Op.gte]: dateStr }
+            },
+            order: [['Id', 'DESC']]
+        });
+
+        let records = [];
+        let miscs = [];
+        let liftingRecords = [];
+
+        if (attendanceSheets.length > 0) {
+            const sheetIds = attendanceSheets.map(s => s.id);
+            records = await AttendanceRecord.findAll({ where: { AttendanceSheetId: { [Op.in]: sheetIds } } });
+            miscs = await AttendanceMisc.findAll({ where: { AttendanceSheetId: { [Op.in]: sheetIds } } });
+            liftingRecords = await LiftingRecord.findAll({ where: { AttendanceSheetId: { [Op.in]: sheetIds } } });
+        }
+
+        if (records.length === 0 && miscs.length === 0 && liftingRecords.length === 0 && purchases.length === 0) {
+            return res.status(404).json({ msg: 'No attendance, lifting, or material purchases found for this week' });
+        }
+
+        // Update WeeklyPaySheet's selected lists to include those found in attendance, lifting, and materials
         const attendancePayeeIds = [...new Set([
             ...records.map(r => r.PayeeId),
             ...miscs.map(m => m.PayeeId),
-            ...liftingRecords.map(l => l.PayeeId)
+            ...liftingRecords.map(l => l.PayeeId),
+            ...uniqueMaterialPayeeIds
         ])].filter(id => !!id).map(id => parseInt(id));
 
         const attendanceSiteIds = [...new Set([
             ...records.map(r => r.SiteId),
             ...miscs.map(m => m.SiteId).filter(Boolean),
-            ...liftingRecords.map(l => l.SiteId)
+            ...liftingRecords.map(l => l.SiteId),
+            ...materialSiteIds
         ])].filter(id => !!id).map(id => parseInt(id));
 
         // Aggregate by PayeeId_SiteId
@@ -1161,7 +1252,20 @@ router.post('/:id/import-attendance', async (req, res) => {
             }
         }
 
-        res.json({ msg: `Successfully imported data for ${updatedCount} cells from Attendance Sheet: ${attendanceSheet.Title}` });
+        // Trigger dealer item synchronization to write them into the grid items immediately
+        await syncDealerItems(weeklySheet);
+
+        let sourceMsg = '';
+        if (attendanceSheets.length > 0) {
+            sourceMsg = `Attendance: ${attendanceSheets.map(s => s.Title).join(', ')}`;
+        }
+        if (purchases.length > 0) {
+            if (sourceMsg) sourceMsg += ' and ';
+            sourceMsg += `Material Purchases (${purchases.length} items)`;
+        }
+        if (!sourceMsg) sourceMsg = 'No sources';
+
+        res.json({ msg: `Successfully imported data from ${sourceMsg}` });
     } catch (err) {
         console.error('Import Attendance Error:', err);
         res.status(500).json({ msg: 'Server Error' });

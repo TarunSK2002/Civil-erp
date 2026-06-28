@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown } from 'lucide-react';
+import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import api from '../api/axios';
 import AttendanceEntryPanel from './AttendanceEntryPanel';
 import './AttendancePaySheetPage.css';
@@ -18,6 +18,12 @@ const AttendancePaySheetPage = () => {
   const [showEntryPanel, setShowEntryPanel] = useState(null);
   const [showMasterSettings, setShowMasterSettings] = useState(false);
 
+  // Summary display preference
+  const [showSummary, setShowSummary] = useState(() => {
+    const saved = localStorage.getItem('aps_show_summary');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
   const [allPayees, setAllPayees] = useState([]);
   const [allSites, setAllSites] = useState([]);
   const [selectedPayeeIds, setSelectedPayeeIds] = useState([]);
@@ -29,9 +35,9 @@ const AttendancePaySheetPage = () => {
   const [entrySiteId, setEntrySiteId] = useState('');
   const [entryPayeeId, setEntryPayeeId] = useState('');
 
-  // Master settings (Tea + Bus expense per labour per day)
-  const [masterSettings, setMasterSettings] = useState({ TeaExpense: '20', BusExpense: '50' });
-  const [editingMaster, setEditingMaster] = useState({ TeaExpense: '', BusExpense: '' });
+  // Master settings (Tea + Bus expense per labour per day, App Version, Update Link)
+  const [masterSettings, setMasterSettings] = useState({ TeaExpense: '20', BusExpense: '50', LatestAppVersion: '2.5.0', UpdateLink: 'https://drive.google.com' });
+  const [editingMaster, setEditingMaster] = useState({ TeaExpense: '', BusExpense: '', LatestAppVersion: '', UpdateLink: '' });
   const [savingMaster, setSavingMaster] = useState(false);
 
   const [showLiftingRatesModal, setShowLiftingRatesModal] = useState(false);
@@ -65,8 +71,18 @@ const AttendancePaySheetPage = () => {
   const fetchMasterSettings = async () => {
     try {
       const r = await api.get('/master-settings');
-      setMasterSettings({ TeaExpense: r.data.TeaExpense || '20', BusExpense: r.data.BusExpense || '50' });
-      setEditingMaster({ TeaExpense: r.data.TeaExpense || '20', BusExpense: r.data.BusExpense || '50' });
+      setMasterSettings({
+        TeaExpense: r.data.TeaExpense || '20',
+        BusExpense: r.data.BusExpense || '50',
+        LatestAppVersion: r.data.LatestAppVersion || '2.5.0',
+        UpdateLink: r.data.UpdateLink || 'https://drive.google.com'
+      });
+      setEditingMaster({
+        TeaExpense: r.data.TeaExpense || '20',
+        BusExpense: r.data.BusExpense || '50',
+        LatestAppVersion: r.data.LatestAppVersion || '2.5.0',
+        UpdateLink: r.data.UpdateLink || 'https://drive.google.com'
+      });
     } catch(e) {
       console.error(e);
     }
@@ -77,7 +93,9 @@ const AttendancePaySheetPage = () => {
     try {
       await Promise.all([
         api.put('/master-settings/TeaExpense', { value: editingMaster.TeaExpense }),
-        api.put('/master-settings/BusExpense', { value: editingMaster.BusExpense })
+        api.put('/master-settings/BusExpense', { value: editingMaster.BusExpense }),
+        api.put('/master-settings/LatestAppVersion', { value: editingMaster.LatestAppVersion }),
+        api.put('/master-settings/UpdateLink', { value: editingMaster.UpdateLink })
       ]);
       setMasterSettings({ ...editingMaster });
       setShowMasterSettings(false);
@@ -307,11 +325,25 @@ const AttendancePaySheetPage = () => {
           >
             <Settings size={16} /> Master Settings
           </button>
+          {sheetData && (
+            <button
+              className="aps-btn aps-btn-secondary"
+              onClick={() => setShowSummary(prev => {
+                const next = !prev;
+                localStorage.setItem('aps_show_summary', JSON.stringify(next));
+                return next;
+              })}
+              style={{ marginRight: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              {showSummary ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showSummary ? 'Hide Summary' : 'Show Summary'}
+            </button>
+          )}
           <button className="aps-btn aps-btn-primary" onClick={() => setShowNewSheetModal(true)}><Plus size={18} /> New Sheet</button>
         </div>
       </div>
 
-      {sheetData && (
+      {sheetData && showSummary && (
         <div className="aps-summary">
           <div className="aps-summary-card total"><div className="aps-summary-label">Date Attendance</div><div className="aps-summary-value">{fmt(totalAttendanceOnly)}</div></div>
           <div className="aps-summary-card misc"><div className="aps-summary-label">Misc Charges</div><div className="aps-summary-value" style={{color:'#00BCD4'}}>{fmt(getTotalMisc())}</div></div>
@@ -527,11 +559,10 @@ const AttendancePaySheetPage = () => {
       {/* Master Settings Modal */}
       {showMasterSettings && (
         <div className="aps-modal-overlay" onClick={() => setShowMasterSettings(false)}>
-          <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', margin: 'auto', maxWidth: 400 }}>
+          <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', margin: 'auto', maxWidth: 420 }}>
             <h2>Master Settings</h2>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
-              These values are multiplied by the number of working labours per day for Tea & Bus expense calculation.
-            </p>
+            
+            <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginTop: 12, marginBottom: 12 }}>Expenses Settings</h3>
             <div className="aps-modal-field">
               <label>Tea Expense per Labour (₹/day)</label>
               <input
@@ -553,7 +584,28 @@ const AttendancePaySheetPage = () => {
             <div style={{ background: 'rgba(255,152,0,0.08)', border: '1px solid rgba(255,152,0,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#FF9800', marginBottom: 16 }}>
               Total per worker per day: ₹{(parseFloat(editingMaster.TeaExpense)||0) + (parseFloat(editingMaster.BusExpense)||0)}
             </div>
-            <div className="aps-modal-actions">
+
+            <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginTop: 16, marginBottom: 12, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>App Updates</h3>
+            <div className="aps-modal-field">
+              <label>Latest App Version (e.g. 2.5.0)</label>
+              <input
+                type="text"
+                value={editingMaster.LatestAppVersion}
+                onChange={e => setEditingMaster({ ...editingMaster, LatestAppVersion: e.target.value })}
+                placeholder="e.g. 2.5.0"
+              />
+            </div>
+            <div className="aps-modal-field">
+              <label>Download Link for Updates</label>
+              <input
+                type="text"
+                value={editingMaster.UpdateLink}
+                onChange={e => setEditingMaster({ ...editingMaster, UpdateLink: e.target.value })}
+                placeholder="e.g. https://drive.google.com/..."
+              />
+            </div>
+
+            <div className="aps-modal-actions" style={{ marginTop: 20 }}>
               <button className="aps-btn aps-btn-secondary" onClick={() => setShowMasterSettings(false)}>Cancel</button>
               <button className="aps-btn aps-btn-primary" onClick={handleSaveMasterSettings} disabled={savingMaster}>
                 {savingMaster ? 'Saving...' : 'Save Settings'}

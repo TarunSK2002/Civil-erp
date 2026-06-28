@@ -124,12 +124,6 @@ async function syncNow() {
       }
     }
 
-    // If all items were successfully uploaded (or none existed), run pull sync
-    const finalPendingCount = await getPendingCount();
-    if (finalPendingCount === 0) {
-      await _pullNow();
-    }
-
     if (onStatusChangeCallback) {
       onStatusChangeCallback({ isOnline, pendingCount: await getPendingCount() });
     }
@@ -218,14 +212,25 @@ async function pullNow() {
   }
 }
 
+let pullIntervalId = null;
+
 function startSyncLoop(intervalMs = 15000) {
   if (syncIntervalId) clearInterval(syncIntervalId);
+  if (pullIntervalId) clearInterval(pullIntervalId);
   
+  // Initial startup synchronization
   syncNow();
+  pullNow();
   
+  // Push local changes loop (default every 15 seconds)
   syncIntervalId = setInterval(() => {
     syncNow();
   }, intervalMs);
+
+  // Pull cloud changes loop (every 5 minutes)
+  pullIntervalId = setInterval(() => {
+    pullNow();
+  }, 300000);
 }
 
 function setStatusCallback(callback) {

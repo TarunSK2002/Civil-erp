@@ -112,7 +112,7 @@ if (dialect === 'sqlite') {
                     recordUuid: instance.uuid,
                     action: 'CREATE',
                     payload: JSON.stringify(instance.toJSON())
-                });
+                }, { transaction: options.transaction });
                 
                 // Schedule sync on next tick to avoid blocking the HTTP response
                 setImmediate(() => {
@@ -139,7 +139,7 @@ if (dialect === 'sqlite') {
                     recordUuid: instance.uuid,
                     action: 'UPDATE',
                     payload: JSON.stringify(instance.toJSON())
-                });
+                }, { transaction: options.transaction });
                 
                 setImmediate(() => {
                     const syncManager = require('../sync/syncManager');
@@ -165,7 +165,7 @@ if (dialect === 'sqlite') {
                     recordUuid: instance.uuid,
                     action: 'DELETE',
                     payload: null
-                });
+                }, { transaction: options.transaction });
                 
                 setImmediate(() => {
                     const syncManager = require('../sync/syncManager');

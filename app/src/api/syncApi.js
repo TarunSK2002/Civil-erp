@@ -8,5 +8,9 @@ export const syncApi = {
   triggerSync: async () => {
     const res = await api.post('/sync-trigger');
     return res.data;
+  },
+  triggerPull: async () => {
+    const res = await api.post('/sync-pull');
+    return res.data;
   }
 };

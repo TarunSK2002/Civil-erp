@@ -115,8 +115,8 @@ function createWindow() {
                             if (!response.ok) throw new Error('Failed to fetch settings');
                             const settings = await response.json();
                             
-                            const currentVersion = '2.6.0';
-                            const latestVersion = settings.LatestAppVersion || '2.6.0';
+                            const currentVersion = '2.7.0';
+                            const latestVersion = settings.LatestAppVersion || '2.7.0';
                             const updateLink = settings.UpdateLink || 'https://drive.google.com';
                             
                             if (latestVersion !== currentVersion) {
@@ -159,7 +159,7 @@ function createWindow() {
                         const { dialog } = require('electron');
                         dialog.showMessageBox(win, {
                             title: 'Jeeva Cloud ERP',
-                            message: 'Jeeva Cloud ERP\nVersion 2.6.0\nDesigned for Jeeva Construction',
+                            message: 'Jeeva Cloud ERP\nVersion 2.7.0\nDesigned for Jeeva Construction',
                             type: 'info'
                         });
                     }

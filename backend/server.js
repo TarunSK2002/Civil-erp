@@ -195,7 +195,7 @@ async function startServer() {
             `);
             await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20');`);
             await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('BusExpense', '50');`);
-            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('LatestAppVersion', '2.6.0');`);
+            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('LatestAppVersion', '2.7.0');`);
             await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('UpdateLink', 'https://drive.google.com');`);
             console.log('SQLite master_settings table verified/created.');
         } else {
@@ -207,7 +207,7 @@ async function startServer() {
                     UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 );
             `);
-            await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '2.6.0'), ('UpdateLink', 'https://drive.google.com');`);
+            await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '2.7.0'), ('UpdateLink', 'https://drive.google.com');`);
             console.log('MySQL master_settings table verified/created.');
         }
 

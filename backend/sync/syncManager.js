@@ -47,6 +47,93 @@ async function getPendingCount() {
   }
 }
 
+// Helper to dynamically remap primary keys and foreign keys in SQLite upon sync ID clash
+async function remapLocalId(tableName, oldId, newId) {
+  const dbModels = require('../models');
+  const sequelize = dbModels.sequelize;
+  const SyncQueue = dbModels.SyncQueue;
+
+  const modelName = Object.keys(dbModels).find(key => {
+    const m = dbModels[key];
+    return m && m.tableName === tableName;
+  });
+  if (!modelName) return;
+  const Model = dbModels[modelName];
+
+  console.log(`[Sync Remap] Remapping ${tableName} ID from ${oldId} to ${newId}`);
+
+  // Update the primary key in local SQLite database (bypass scopes and hooks)
+  await Model.unscoped().update(
+    { id: newId },
+    { where: { id: oldId }, hooks: false }
+  );
+
+  // Update all associated models' foreign keys pointing to this model
+  for (const key of Object.keys(dbModels)) {
+    if (key === 'sequelize' || key === 'SyncQueue') continue;
+    const AssociateModel = dbModels[key];
+    if (!AssociateModel || !AssociateModel.associations) continue;
+
+    for (const assocName of Object.keys(AssociateModel.associations)) {
+      const association = AssociateModel.associations[assocName];
+      if (association.target === Model && association.foreignKey) {
+        const fk = association.foreignKey;
+        await AssociateModel.unscoped().update(
+          { [fk]: newId },
+          { where: { [fk]: oldId }, hooks: false }
+        );
+      }
+    }
+  }
+
+  // Rewrite any pending SyncQueue item payloads that refer to the old ID
+  const unsyncedItems = await SyncQueue.findAll({
+    where: { status: ['PENDING', 'FAILED'] }
+  });
+
+  for (const item of unsyncedItems) {
+    if (item.payload) {
+      try {
+        const payload = JSON.parse(item.payload);
+        let updated = false;
+
+        // If the payload is for the same table, update its own primary key
+        if (item.tableName === tableName) {
+          if (payload.id === oldId) { payload.id = newId; updated = true; }
+          if (payload.Id === oldId) { payload.Id = newId; updated = true; }
+        }
+
+        // If the payload is for another table, scan and update any matching foreign key
+        if (item.tableName !== tableName) {
+          const AssociateModelName = Object.keys(dbModels).find(k => dbModels[k].tableName === item.tableName);
+          const AssociateModel = dbModels[AssociateModelName];
+          if (AssociateModel && AssociateModel.associations) {
+            for (const assocName of Object.keys(AssociateModel.associations)) {
+              const association = AssociateModel.associations[assocName];
+              if (association.target === Model && association.foreignKey) {
+                const fk = association.foreignKey;
+                // Check exact field or lower-case variation in payload
+                const fkField = Object.keys(payload).find(k => k.toLowerCase() === fk.toLowerCase());
+                if (fkField && payload[fkField] === oldId) {
+                  payload[fkField] = newId;
+                  updated = true;
+                }
+              }
+            }
+          }
+        }
+
+        if (updated) {
+          item.payload = JSON.stringify(payload);
+          await item.save();
+        }
+      } catch (err) {
+        console.error('[Sync Remap] Failed to update unsynced payload:', err.message);
+      }
+    }
+  }
+}
+
 async function syncNow() {
   if (isSyncing) return;
   isSyncing = true;
@@ -106,6 +193,13 @@ async function syncNow() {
         });
 
         if (response && response.ok) {
+          const resData = await response.json().catch(() => ({}));
+          const localId = payload ? (payload.id || payload.Id) : null;
+          
+          if (resData.newId && localId && resData.newId !== localId) {
+            await remapLocalId(item.tableName, localId, resData.newId);
+          }
+
           item.status = 'SYNCED';
           item.errorMessage = null;
           await item.save();
@@ -135,6 +229,9 @@ async function syncNow() {
 }
 
 async function _pullNow() {
+  const dbModels = require('../models');
+  const sequelize = dbModels.sequelize;
+  let currentTable = '';
   try {
     const endpoint = `${RENDER_API_URL}/sync/pull`;
     const response = await fetch(endpoint, {
@@ -147,14 +244,13 @@ async function _pullNow() {
     }
 
     const cloudData = await response.json();
-    const dbModels = require('../models');
 
     // Disable foreign key checks during import to prevent constraint failures
-    const sequelize = dbModels.sequelize;
     await sequelize.query('PRAGMA foreign_keys = OFF;').catch(() => {});
 
     // Loop through each table and merge records locally
     for (const tableName of Object.keys(cloudData)) {
+      currentTable = tableName;
       const modelName = Object.keys(dbModels).find(key => {
         const m = dbModels[key];
         return m && m.tableName === tableName;
@@ -182,11 +278,18 @@ async function _pullNow() {
       }
     }
 
-    // Re-enable foreign key checks
-    await sequelize.query('PRAGMA foreign_keys = ON;').catch(() => {});
     console.log('Database pull synchronization complete.');
   } catch (err) {
-    console.error('Error running pull sync:', err.message);
+    let msg = err.message;
+    if (err.errors && err.errors.length > 0) {
+      msg = `${err.message}: ${err.errors.map(e => `${e.path} (${e.value}) - ${e.message}`).join(', ')}`;
+    }
+    const finalErrorMsg = `Table [${currentTable || 'unknown'}]: ${msg}`;
+    console.error('Error running pull sync:', finalErrorMsg);
+    throw new Error(finalErrorMsg);
+  } finally {
+    // Re-enable foreign key checks
+    await sequelize.query('PRAGMA foreign_keys = ON;').catch(() => {});
   }
 }
 
@@ -197,14 +300,12 @@ async function pullNow() {
     const onlineNow = await checkInternet();
     if (!onlineNow) {
       isOnline = false;
-      isSyncing = false;
-      return;
+      throw new Error('No internet connection');
     }
     const backendOnline = await checkRenderBackend();
     isOnline = backendOnline;
     if (!backendOnline) {
-      isSyncing = false;
-      return;
+      throw new Error('Central API backend offline');
     }
     await _pullNow();
   } finally {
@@ -220,7 +321,7 @@ function startSyncLoop(intervalMs = 15000) {
   
   // Initial startup synchronization
   syncNow();
-  pullNow();
+  pullNow().catch(err => console.error('Background pull failed:', err.message));
   
   // Push local changes loop (default every 15 seconds)
   syncIntervalId = setInterval(() => {
@@ -229,7 +330,7 @@ function startSyncLoop(intervalMs = 15000) {
 
   // Pull cloud changes loop (every 5 minutes)
   pullIntervalId = setInterval(() => {
-    pullNow();
+    pullNow().catch(err => console.error('Background pull failed:', err.message));
   }, 300000);
 }
 

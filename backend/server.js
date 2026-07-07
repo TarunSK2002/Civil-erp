@@ -118,9 +118,25 @@ app.post('/api/sync', async (req, res) => {
                 delete updatePayload.id;
                 delete updatePayload.Id;
                 await existingRecord.update(updatePayload);
+                res.json({ success: true, newId: existingRecord.id || existingRecord.Id });
             } else {
                 // Create
-                await Model.create({ ...(payload || {}), uuid });
+                const createPayload = payload ? { ...payload } : {};
+                
+                // Check if the requested ID is already taken by a record with a different UUID
+                const requestedId = createPayload.id || createPayload.Id;
+                if (requestedId) {
+                    const idClash = await Model.findByPk(requestedId);
+                    if (idClash) {
+                        // Strip clashing ID to allow database auto-increment to generate a fresh one
+                        delete createPayload.id;
+                        delete createPayload.Id;
+                        console.log(`[Sync] ID clash detected on table "${tableName}" for ID ${requestedId}. Auto-generating new ID.`);
+                    }
+                }
+                
+                const newRecord = await Model.create({ ...createPayload, uuid });
+                res.json({ success: true, newId: newRecord.id || newRecord.Id });
             }
         } else if (action === 'DELETE') {
             let existingRecord = await Model.findOne({ where: { uuid } });
@@ -138,9 +154,8 @@ app.post('/api/sync', async (req, res) => {
                     await existingRecord.destroy();
                 }
             }
+            res.json({ success: true });
         }
-        
-        res.json({ success: true });
     } catch (err) {
         console.error(`Sync error on table "${tableName}":`, err.message);
         res.status(500).json({ error: err.message });

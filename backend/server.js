@@ -104,8 +104,10 @@ app.post('/api/sync', async (req, res) => {
             if (!existingRecord) {
                 const pkValue = payload ? (payload.Id || payload.id) : null;
                 if (pkValue) {
-                    existingRecord = await Model.findByPk(pkValue);
-                    if (existingRecord) {
+                    const pkRecord = await Model.findByPk(pkValue);
+                    // Only link if the existing record has NO uuid set (legacy case)
+                    if (pkRecord && (!pkRecord.uuid || pkRecord.uuid === uuid)) {
+                        existingRecord = pkRecord;
                         console.log(`Linking existing record in table "${tableName}" with ID ${pkValue} to UUID ${uuid}`);
                         await existingRecord.update({ uuid });
                     }
@@ -143,7 +145,11 @@ app.post('/api/sync', async (req, res) => {
             if (!existingRecord) {
                 const pkValue = payload ? (payload.Id || payload.id) : null;
                 if (pkValue) {
-                    existingRecord = await Model.findByPk(pkValue);
+                    const pkRecord = await Model.findByPk(pkValue);
+                    // Only match by ID if it has no uuid (legacy case)
+                    if (pkRecord && (!pkRecord.uuid || pkRecord.uuid === uuid)) {
+                        existingRecord = pkRecord;
+                    }
                 }
             }
             

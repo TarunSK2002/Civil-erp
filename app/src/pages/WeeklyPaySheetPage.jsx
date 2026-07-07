@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Table2, ChevronDown, Check, X, Loader2, Trash2,
   Calendar, CreditCard, FileSpreadsheet, Users, Building2,
-  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, Tag, RotateCcw,
+  IndianRupee, Clock, CheckCircle2, AlertCircle, Package, RotateCcw,
   Eye, EyeOff
 } from 'lucide-react';
 import api from '../api/axios';
@@ -18,7 +18,7 @@ const WeeklyPaySheetPage = () => {
   const [importing, setImporting] = useState(false);
 
   // Filter
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter] = useState('All');
 
   // Summary display preference
   const [showSummary, setShowSummary] = useState(() => {
@@ -56,11 +56,6 @@ const WeeklyPaySheetPage = () => {
   const [purchaseDetailsOpen, setPurchaseDetailsOpen] = useState(true);
   const [savingPopupDiscounts, setSavingPopupDiscounts] = useState(false);
   const [toast, setToast] = useState(null); // { message, type }
-
-  // Material Discount Popup
-  const [materialPopup, setMaterialPopup] = useState(null); // { siteId, siteName }
-  const [materialDiscounts, setMaterialDiscounts] = useState({}); // { [itemId]: discountValue }
-  const [savingDiscounts, setSavingDiscounts] = useState(false);
 
   // New sheet form
   const [newSheetForm, setNewSheetForm] = useState({
@@ -349,30 +344,6 @@ const WeeklyPaySheetPage = () => {
     }
   };
 
-  const handleRemovePayee = async (payeeId) => {
-    if (sheetData?.sheet?.Status === 'Closed') return;
-    if (!window.confirm('Remove this payee and all their recorded amounts from this sheet?')) return;
-    try {
-      await api.delete(`/weekly-pay-sheets/${selectedSheetId}/payees/${payeeId}`);
-      fetchSheetData(selectedSheetId);
-      fetchSheets();
-    } catch (err) {
-      alert(err.response?.data?.msg || 'Failed to remove payee');
-    }
-  };
-
-  const handleRemoveSite = async (siteId) => {
-    if (sheetData?.sheet?.Status === 'Closed') return;
-    if (!window.confirm('Remove this site column and all its recorded amounts from this sheet?')) return;
-    try {
-      await api.delete(`/weekly-pay-sheets/${selectedSheetId}/sites/${siteId}`);
-      fetchSheetData(selectedSheetId);
-      fetchSheets();
-    } catch (err) {
-      alert(err.response?.data?.msg || 'Failed to remove site');
-    }
-  };
-
   // ---- Cell Operations ----
   const handleCellClick = (payeeId, siteId) => {
     if (sheetData?.sheet?.Status === 'Closed') return; // Read-only
@@ -575,35 +546,6 @@ const WeeklyPaySheetPage = () => {
   const getTotalMaterialDiscount = () =>
     (sheetData?.sites || []).reduce((sum, s) => sum + getMaterialDiscount(s.id), 0);
 
-  // ---- Material Discount Save ----
-  const openMaterialPopup = (siteId, siteName) => {
-    if (sheetData?.sheet?.Status === 'Closed') return;
-    const items = sheetData?.materialData?.[siteId]?.items || [];
-    if (items.length === 0) return;
-    // Pre-fill discount inputs with existing values
-    const initDiscounts = {};
-    items.forEach(it => { initDiscounts[it.id] = it.discount; });
-    setMaterialDiscounts(initDiscounts);
-    setMaterialPopup({ siteId, siteName });
-  };
-
-  const handleSaveDiscounts = async () => {
-    setSavingDiscounts(true);
-    try {
-      const updates = Object.entries(materialDiscounts).map(([itemId, discount]) =>
-        api.patch(`/site-materials/${itemId}/discount`, { Discount: parseFloat(discount) || 0 })
-      );
-      await Promise.all(updates);
-      setMaterialPopup(null);
-      setMaterialDiscounts({});
-      fetchSheetData(selectedSheetId);
-    } catch (err) {
-      alert(err.response?.data?.msg || 'Failed to save discounts');
-    } finally {
-      setSavingDiscounts(false);
-    }
-  };
-
   // ---- Filter payees ----
   const getFilteredPayees = () => {
     if (!sheetData?.payees) return [];
@@ -650,7 +592,6 @@ const WeeklyPaySheetPage = () => {
   }
 
   const filteredPayees = getFilteredPayees();
-  const currentSheet = sheets.find(s => s.id === selectedSheetId);
 
   return (
     <div className="wps-container">
@@ -1179,119 +1120,6 @@ const WeeklyPaySheetPage = () => {
         </div>
       )}
 
-      {/* ==================== MATERIAL DISCOUNT POPUP ==================== */}
-      {materialPopup && (() => {
-        const { siteId, siteName } = materialPopup;
-        const items = sheetData?.materialData?.[siteId]?.items || [];
-        const totalGross = items.reduce((s, it) => s + it.gross, 0);
-        const totalDiscount = items.reduce((s, it) => s + (parseFloat(materialDiscounts[it.id]) || 0), 0);
-        const totalNet = Math.max(0, totalGross - totalDiscount);
-        return (
-          <div className="wps-modal-overlay" onClick={() => setMaterialPopup(null)}>
-            <div className="wps-material-popup" onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Package size={18} color="#9C27B0" />
-                  <h3 style={{ margin: 0, fontSize: 16 }}>Materials — {siteName}</h3>
-                </div>
-                <button onClick={() => setMaterialPopup(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <X size={18} />
-                </button>
-              </div>
-
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-                <Tag size={11} style={{ marginRight: 4 }} />
-                Enter any negotiated discount per item. Net amount will flow into the weekly sheet totals.
-              </p>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <th style={{ padding: '8px 6px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600 }}>Material</th>
-                      <th style={{ padding: '8px 6px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600 }}>Dealer</th>
-                      <th style={{ padding: '8px 6px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>Bill (₹)</th>
-                      <th style={{ padding: '8px 6px', textAlign: 'center', color: '#FF9800', fontWeight: 600 }}>Discount (₹)</th>
-                      <th style={{ padding: '8px 6px', textAlign: 'right', color: '#9C27B0', fontWeight: 600 }}>Net (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map(item => {
-                      const disc = parseFloat(materialDiscounts[item.id]) || 0;
-                      const net = Math.max(0, item.gross - disc);
-                      const isOver = disc > item.gross;
-                      return (
-                        <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '10px 6px' }}>
-                            <div style={{ fontWeight: 600 }}>{item.materialName}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.quantity} {item.unit}</div>
-                          </td>
-                          <td style={{ padding: '10px 6px', color: 'var(--text-secondary)', fontSize: 12 }}>{item.dealerName}</td>
-                          <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 500 }}>₹{item.gross.toLocaleString('en-IN')}</td>
-                          <td style={{ padding: '10px 6px' }}>
-                            <input
-                              type="number"
-                              min="0"
-                              max={item.gross}
-                              value={materialDiscounts[item.id] ?? 0}
-                              onChange={e => setMaterialDiscounts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                              style={{
-                                width: '100%',
-                                backgroundColor: 'var(--bg-input)',
-                                border: `1px solid ${isOver ? '#f44336' : 'rgba(255,152,0,0.4)'}`,
-                                borderRadius: 6,
-                                padding: '6px 8px',
-                                color: isOver ? '#f44336' : '#FF9800',
-                                textAlign: 'right',
-                                outline: 'none',
-                                fontSize: 13
-                              }}
-                            />
-                            {isOver && <div style={{ fontSize: 10, color: '#f44336', marginTop: 2 }}>Exceeds bill amount!</div>}
-                          </td>
-                          <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, color: '#9C27B0' }}>
-                            ₹{net.toLocaleString('en-IN')}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid rgba(156,39,176,0.25)', background: 'rgba(156,39,176,0.05)' }}>
-                      <td colSpan={2} style={{ padding: '10px 6px', fontWeight: 700 }}>TOTAL</td>
-                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700 }}>₹{totalGross.toLocaleString('en-IN')}</td>
-                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, color: '#FF9800' }}>
-                        {totalDiscount > 0 ? `-₹${totalDiscount.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 800, color: '#9C27B0', fontSize: 15 }}>
-                        ₹{totalNet.toLocaleString('en-IN')}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-                <button
-                  onClick={() => setMaterialPopup(null)}
-                  style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveDiscounts}
-                  disabled={savingDiscounts}
-                  style={{ flex: 2, padding: '10px', borderRadius: 8, border: 'none', background: '#9C27B0', color: 'white', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-                >
-                  {savingDiscounts ? <Loader2 size={16} className="wps-spinner" /> : <Check size={16} />}
-                  {savingDiscounts ? 'Saving...' : 'Save Discounts'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* ==================== MODALS ==================== */}
 
       {/* New Sheet Modal */}
@@ -1359,7 +1187,6 @@ const WeeklyPaySheetPage = () => {
                 </div>
               ) : allPayees.filter(p => p.Name.toLowerCase().includes(payeeSearch.toLowerCase()) || p.Type.toLowerCase().includes(payeeSearch.toLowerCase())).map(p => {
                 const isSelected = selectedPayeeIds.includes(p.id);
-                const alreadyInSheet = sheetData?.payees?.some(sp => sp.id === p.id);
                 return (
                   <div
                     key={p.id}
@@ -1427,7 +1254,6 @@ const WeeklyPaySheetPage = () => {
                 </div>
               ) : allSites.filter(s => s.SiteName.toLowerCase().includes(siteSearch.toLowerCase())).map(s => {
                 const isSelected = selectedSiteIds.includes(s.id);
-                const alreadyInSheet = sheetData?.sites?.some(ss => ss.id === s.id);
                 return (
                   <div
                     key={s.id}

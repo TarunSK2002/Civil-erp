@@ -83,18 +83,6 @@ const PersonTypeMasterPage = () => {
     }
   };
 
-  const handleUpdateRate = async (type) => {
-    const newDailyRate = prompt(`Update daily rate for ${type.Name} (current: ₹${parseFloat(type.DailyRate || 0).toLocaleString('en-IN')})`, type.DailyRate || 0);
-    if (newDailyRate === null) return;
-    try {
-      const res = await api.post(`/person-types/${type.id}/update-rate`, { DailyRate: parseFloat(newDailyRate) });
-      alert(res.data.msg);
-      fetchTypes();
-    } catch (err) {
-      alert(err.response?.data?.msg || 'Failed to update rate');
-    }
-  };
-
   const handleToggleActive = async (type) => {
     try {
       await api.put(`/person-types/${type.id}`, { IsActive: !type.IsActive });

@@ -14,7 +14,6 @@ const UNITS = [
 const MaterialPurchasePage = () => {
   const [purchases, setPurchases] = useState([]);
   const [sites, setSites] = useState([]);
-  const [materials, setMaterials] = useState([]);
   const [materialTypes, setMaterialTypes] = useState([]);
   
   // Site-specific dropdowns
@@ -126,13 +125,11 @@ const MaterialPurchasePage = () => {
 
   const fetchDropdowns = async () => {
     try {
-      const [sitesRes, materialsRes, typesRes] = await Promise.all([
+      const [sitesRes, typesRes] = await Promise.all([
         api.get('/sites'),
-        api.get('/materials'),
         api.get('/material-types')
       ]);
       setSites(sitesRes.data);
-      setMaterials(materialsRes.data);
       setMaterialTypes(typesRes.data);
     } catch (err) {
       console.error('Failed to fetch dropdown data', err);

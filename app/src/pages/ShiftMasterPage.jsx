@@ -58,11 +58,6 @@ const ShiftMasterPage = () => {
     }
   };
 
-  const fmt = (num) => {
-    if (!num || num === 0) return '₹0';
-    return '₹' + parseFloat(num).toLocaleString('en-IN');
-  };
-
   if (loading) {
     return (
       <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import logo from '../assets/logo.jpeg';
 import { 
   LayoutDashboard, 
@@ -63,13 +63,7 @@ const SidebarItem = ({ to, icon: Icon, label, expanded }) => (
 );
 
 const Sidebar = ({ expanded }) => {
-  const { logout, user } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  const { user } = useAuth();
 
   return (
     <aside style={{

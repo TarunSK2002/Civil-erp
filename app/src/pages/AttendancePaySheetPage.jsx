@@ -222,39 +222,6 @@ const AttendancePaySheetPage = () => {
     return sheetData.payees.reduce((sum, p) => sum + getDateRowAttendance(p.id), 0);
   };
 
-  const getPayeeWeeklyAttendance = (payeeId) => {
-    if (!sheetData?.grid) return 0;
-    let total = 0;
-    Object.keys(sheetData.grid).forEach(key => {
-      if (key.startsWith(`${payeeId}_`)) {
-        const records = sheetData.grid[key].records || [];
-        records.forEach(r => {
-          total += r.calculatedAmount || 0;
-        });
-      }
-    });
-
-    const liftingTotal = (sheetData.liftingRecords || [])
-      .filter(l => l.PayeeId === payeeId)
-      .reduce((sum, l) => sum + parseFloat(l.Amount || 0), 0);
-
-    return total + liftingTotal;
-  };
-
-  const getPayeeWeeklyLabourCount = (payeeId) => {
-    if (!sheetData?.grid) return 0;
-    let count = 0;
-    Object.keys(sheetData.grid).forEach(key => {
-      if (key.startsWith(`${payeeId}_`)) {
-        const records = sheetData.grid[key].records || [];
-        records.forEach(r => {
-          count += r.labourCount || 0;
-        });
-      }
-    });
-    return count;
-  };
-
   const getWeeklySiteLabourCount = (payeeId, siteId) => {
     if (!sheetData?.grid) return 0;
     const key = `${payeeId}_${siteId}`;
@@ -263,17 +230,6 @@ const AttendancePaySheetPage = () => {
   };
 
   const getMiscTotal = (payeeId) => sheetData?.miscData?.[payeeId]?.total || 0;
-  const getRowGrand = (payeeId) => getDateRowAttendance(payeeId) + getMiscTotal(payeeId);
-
-  const getGrandTotal = () => {
-    if (!sheetData?.payees) return 0;
-    return sheetData.payees.reduce((sum, p) => sum + getRowGrand(p.id), 0);
-  };
-
-  const getTotalAttendance = () => {
-    if (!sheetData?.payees) return 0;
-    return sheetData.payees.reduce((sum, p) => sum + getDateRowAttendance(p.id), 0);
-  };
 
   const getTotalMisc = () => {
     if (!sheetData?.payees) return 0;
@@ -428,7 +384,6 @@ const AttendancePaySheetPage = () => {
             <tbody>
               {sheetData.payees.map(payee => {
                 const rowAttendance = getDateRowAttendance(payee.id);
-                const miscTotal = getMiscTotal(payee.id);
 
                 return (
                   <tr key={payee.id}>

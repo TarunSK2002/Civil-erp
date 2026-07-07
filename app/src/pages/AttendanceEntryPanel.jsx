@@ -149,7 +149,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
   useEffect(() => {
     if (profitItem) {
-      const match = profitItem.name.match(/Mason Profit \((\d+(\.\d+)?)\%\)/);
+      const match = profitItem.name.match(/Mason Profit \((\d+(\.\d+)?)%\)/);
       setProfitPercent(match ? match[1] : '');
       setProfitAmount(String(profitItem.amount));
     } else {

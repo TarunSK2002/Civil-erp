@@ -33,6 +33,10 @@ const SitePaymentSummaryPage = () => {
     searchTerm === '' || s.SiteName?.toLowerCase().includes(searchTerm.toLowerCase()) || s.Client?.Name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (loading) {
+    return <div className="data-page" style={{ padding: '24px' }}>Loading site payment summary...</div>;
+  }
+
   return (
     <div className="data-page" style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>

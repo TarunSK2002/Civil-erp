@@ -47,6 +47,14 @@ async function getPendingCount() {
   }
 }
 
+async function waitForActiveSync(timeoutMs = 10000) {
+  const startedAt = Date.now();
+  while (isSyncing && Date.now() - startedAt < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return !isSyncing;
+}
+
 // Helper to dynamically remap primary keys and foreign keys in SQLite upon sync ID clash
 async function remapLocalId(tableName, oldId, newId) {
   const dbModels = require('../models');
@@ -244,36 +252,54 @@ async function _pullNow() {
     }
 
     const cloudData = await response.json();
+    const idMaps = {};
+    const modelKeys = getPullModelOrder(dbModels, cloudData);
 
     // Disable foreign key checks during import to prevent constraint failures
     await sequelize.query('PRAGMA foreign_keys = OFF;').catch(() => {});
 
     // Loop through each table and merge records locally
-    for (const tableName of Object.keys(cloudData)) {
+    for (const modelKey of modelKeys) {
+      const Model = dbModels[modelKey];
+      const tableName = Model.tableName;
       currentTable = tableName;
-      const modelName = Object.keys(dbModels).find(key => {
-        const m = dbModels[key];
-        return m && m.tableName === tableName;
-      });
-
-      if (!modelName) continue;
-      const Model = dbModels[modelName];
       const records = cloudData[tableName];
+      idMaps[tableName] = idMaps[tableName] || new Map();
 
       for (const cloudRecord of records) {
         const uuid = cloudRecord.uuid;
         if (!uuid) continue;
+        const cloudId = cloudRecord.id || cloudRecord.Id;
+        const pullPayload = remapPullForeignKeys(Model, { ...cloudRecord }, idMaps);
 
         // Check if record already exists locally (bypassing default soft-delete scopes)
         const existingRecord = await Model.unscoped().findOne({ where: { uuid } });
 
         if (existingRecord) {
-          const updatePayload = { ...cloudRecord };
+          const updatePayload = { ...pullPayload };
           delete updatePayload.id;
           delete updatePayload.Id;
           await existingRecord.update(updatePayload, { hooks: false });
+          if (cloudId) {
+            idMaps[tableName].set(Number(cloudId), existingRecord.id || existingRecord.Id);
+          }
         } else {
-          await Model.create(cloudRecord, { hooks: false });
+          const createPayload = { ...pullPayload };
+          const requestedId = createPayload.id || createPayload.Id;
+
+          if (requestedId) {
+            const idClash = await Model.unscoped().findByPk(requestedId);
+            if (idClash) {
+              delete createPayload.id;
+              delete createPayload.Id;
+              console.log(`[Pull] Local ID clash on "${tableName}" for cloud ID ${requestedId}. Creating with a new local ID.`);
+            }
+          }
+
+          const newRecord = await Model.create(createPayload, { hooks: false });
+          if (cloudId) {
+            idMaps[tableName].set(Number(cloudId), newRecord.id || newRecord.Id);
+          }
         }
       }
     }
@@ -293,8 +319,74 @@ async function _pullNow() {
   }
 }
 
+function getPullModelOrder(dbModels, cloudData) {
+  const preferredOrder = [
+    'Client',
+    'Payee',
+    'Labour',
+    'MaterialType',
+    'Material',
+    'Site',
+    'SiteSection',
+    'SiteProject',
+    'ShiftMaster',
+    'PersonType',
+    'SiteWorkValue',
+    'SiteMaterial',
+    'Payment',
+    'AttendanceSheet',
+    'AttendanceRecord',
+    'AttendanceMisc',
+    'LiftingRecord',
+    'WeeklyPaySheet',
+    'WeeklyPaySheetItem',
+    'PettyCash',
+    'PersonalExpense'
+  ];
+
+  const cloudTables = new Set(Object.keys(cloudData));
+  const syncableKeys = Object.keys(dbModels).filter(key => {
+    const Model = dbModels[key];
+    return Model && Model.tableName && cloudTables.has(Model.tableName);
+  });
+
+  const orderedKeys = preferredOrder.filter(key => syncableKeys.includes(key));
+  const remainingKeys = syncableKeys.filter(key => !orderedKeys.includes(key));
+  return [...orderedKeys, ...remainingKeys];
+}
+
+function remapPullForeignKeys(Model, payload, idMaps) {
+  if (!Model.associations) return payload;
+
+  for (const association of Object.values(Model.associations)) {
+    if (association.associationType !== 'BelongsTo' || !association.target || !association.foreignKey) {
+      continue;
+    }
+
+    const targetTable = association.target.tableName;
+    const targetMap = idMaps[targetTable];
+    if (!targetMap) continue;
+
+    const fk = association.foreignKey;
+    const payloadField = Object.keys(payload).find(key => key.toLowerCase() === fk.toLowerCase());
+    if (!payloadField || payload[payloadField] == null) continue;
+
+    const mappedId = targetMap.get(Number(payload[payloadField]));
+    if (mappedId) {
+      payload[payloadField] = mappedId;
+    }
+  }
+
+  return payload;
+}
+
 async function pullNow() {
-  if (isSyncing) return;
+  if (isSyncing) {
+    const canRun = await waitForActiveSync();
+    if (!canRun) {
+      throw new Error('Another sync is still running. Please try again in a few seconds.');
+    }
+  }
   isSyncing = true;
   try {
     const onlineNow = await checkInternet();

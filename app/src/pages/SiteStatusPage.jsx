@@ -31,6 +31,10 @@ const SiteStatusPage = () => {
     }
   };
 
+  if (loading) {
+    return <div style={{ padding: '24px' }}>Loading sites...</div>;
+  }
+
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>

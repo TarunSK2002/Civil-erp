@@ -26,7 +26,7 @@ const StatCard = ({ title, value, icon: Icon, color, subValue }) => {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ 
-          backgroundColor: `${color}20` || 'rgba(255, 179, 0, 0.1)',
+          backgroundColor: color ? `${color}20` : 'rgba(255, 179, 0, 0.1)',
           padding: '10px',
           borderRadius: '10px',
           display: 'flex',

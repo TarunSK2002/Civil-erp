@@ -55,6 +55,10 @@ Payment.belongsTo(Material, { foreignKey: 'MaterialId', as: 'Material' });
 Payee.hasMany(Payment, { foreignKey: 'PayeeId', as: 'Payments' });
 Payment.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
 
+// Payee <-> Labour (1:N)
+Payee.hasMany(Labour, { foreignKey: 'PayeeId', as: 'Labours' });
+Labour.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
+
 // WeeklyPaySheet <-> WeeklyPaySheetItem (1:N)
 WeeklyPaySheet.hasMany(WeeklyPaySheetItem, { foreignKey: 'WeeklyPaySheetId', as: 'Items' });
 WeeklyPaySheetItem.belongsTo(WeeklyPaySheet, { foreignKey: 'WeeklyPaySheetId', as: 'Sheet' });

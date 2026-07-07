@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
+const fs = require('fs');
 const isDev = !app.isPackaged;
 
 let backendProcess = null;
@@ -12,8 +13,13 @@ function startBackend() {
         : path.join(process.resourcesPath, 'backend');
     
     const backendPath = path.join(backendDir, 'server.js');
+    const logPath = path.join(app.getPath('userData'), 'backend.log');
 
     console.log('Starting backend at:', backendPath);
+    console.log('Backend logs will be written to:', logPath);
+
+    const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+    logStream.write(`\n=== Backend process started at ${new Date().toISOString()} ===\n`);
     
     backendProcess = fork(backendPath, [], {
         cwd: backendDir,
@@ -38,18 +44,24 @@ function startBackend() {
 
     if (backendProcess.stdout) {
         backendProcess.stdout.on('data', (data) => {
-            console.log(`Backend stdout: ${data}`);
+            const text = data.toString();
+            console.log(`Backend stdout: ${text}`);
+            logStream.write(`[STDOUT] ${text}`);
         });
     }
 
     if (backendProcess.stderr) {
         backendProcess.stderr.on('data', (data) => {
-            console.error(`Backend stderr: ${data}`);
+            const text = data.toString();
+            console.error(`Backend stderr: ${text}`);
+            logStream.write(`[STDERR] ${text}`);
         });
     }
 
     backendProcess.on('exit', (code) => {
-        console.log(`Backend process exited with code ${code}`);
+        const text = `Backend process exited with code ${code}\n`;
+        console.log(text);
+        logStream.write(text);
     });
 }
 

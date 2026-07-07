@@ -76,7 +76,8 @@ const SyncStatus = () => {
       window.location.reload();
     } catch (err) {
       console.error('Manual pull failed:', err);
-      setStatus(prev => ({ ...prev, error: 'Pull failed: Connection issue' }));
+      const errMsg = err.response?.data?.error || err.message || 'Connection issue';
+      setStatus(prev => ({ ...prev, error: `Pull failed: ${errMsg}` }));
     } finally {
       setSyncing(false);
     }
@@ -90,19 +91,16 @@ const SyncStatus = () => {
   let statusColor = 'var(--text-muted)';
   let statusBg = 'rgba(255, 255, 255, 0.05)';
   let Icon = CloudOff;
-  let statusText = 'Offline';
 
   if (isOnline) {
     if (pending > 0) {
       statusColor = '#2196F3'; // Blue
       statusBg = 'rgba(33, 150, 243, 0.1)';
       Icon = Cloud;
-      statusText = 'Pending Sync';
     } else {
       statusColor = '#4CAF50'; // Green
       statusBg = 'rgba(76, 175, 80, 0.1)';
       Icon = Cloud;
-      statusText = 'Synced';
     }
   }
 

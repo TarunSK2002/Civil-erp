@@ -5,7 +5,7 @@ const fs = require('fs');
 const isDev = !app.isPackaged;
 
 let backendProcess = null;
-let mainWindow = null;
+
 
 function startBackend() {
     const backendDir = isDev 
@@ -25,22 +25,12 @@ function startBackend() {
         cwd: backendDir,
         env: {
             ...process.env,
-            ELECTRON_RUN_AS_NODE: '1',
-            DB_DIALECT: 'sqlite',
-            USER_DATA_PATH: app.getPath('userData'),
-            RENDER_API_URL: 'https://civil-erp.onrender.com/api'
+            ELECTRON_RUN_AS_NODE: '1'
         },
         stdio: 'pipe'
     });
 
-    // Forward sync status events from backend to the renderer process
-    backendProcess.on('message', (message) => {
-        if (message && message.type === 'sync-status-changed') {
-            if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-                mainWindow.webContents.send('sync-status-changed', message.data);
-            }
-        }
-    });
+
 
     if (backendProcess.stdout) {
         backendProcess.stdout.on('data', (data) => {
@@ -183,7 +173,7 @@ function createWindow() {
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
 
-    mainWindow = win;
+
 
     win.loadURL(
         isDev

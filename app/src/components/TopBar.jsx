@@ -1,8 +1,7 @@
-import { Menu, Sun, Moon, LogOut } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Cloud } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import SyncStatus from './SyncStatus';
 
 const TopBar = ({ onToggleSidebar }) => {
   const { theme, toggleTheme } = useTheme();
@@ -64,7 +63,22 @@ const TopBar = ({ onToggleSidebar }) => {
           </div>
         </div>
 
-        <SyncStatus />
+        {/* Online Status Badge */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 12px',
+          borderRadius: '20px',
+          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          border: '1px solid rgba(76, 175, 80, 0.25)',
+          color: '#4CAF50',
+          fontSize: '13px',
+          fontWeight: '600'
+        }}>
+          <Cloud size={18} />
+          <span>Online</span>
+        </div>
 
         <button 
           onClick={toggleTheme}

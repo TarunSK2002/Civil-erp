@@ -23,7 +23,7 @@ const SiteSection = require('./SiteSection');
 const SiteProject = require('./SiteProject');
 const LiftingChargeRate = require('./LiftingChargeRate');
 const LiftingRecord = require('./LiftingRecord');
-const SyncQueue = require('../sync/syncQueue');
+
 
 // Associations
 
@@ -181,5 +181,5 @@ module.exports = {
     SiteProject,
     LiftingChargeRate,
     LiftingRecord,
-    SyncQueue
+
 };

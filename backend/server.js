@@ -43,155 +43,6 @@ app.use('/api/undo', require('./routes/undoRoutes'));
 app.use('/api/site-sections', require('./routes/siteSectionRoutes'));
 app.use('/api/site-projects', require('./routes/siteProjectRoutes'));
 
-// Sync Routes
-const syncManager = require('./sync/syncManager');
-app.get('/api/sync-status', async (req, res) => {
-    try {
-        const isOnline = syncManager.isOnlineStatus();
-        const pendingCount = await syncManager.getPendingCount();
-        res.json({ isOnline, pendingCount });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/sync-trigger', async (req, res) => {
-    try {
-        await syncManager.syncNow();
-        const isOnline = syncManager.isOnlineStatus();
-        const pendingCount = await syncManager.getPendingCount();
-        res.json({ success: true, isOnline, pendingCount });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/sync-pull', async (req, res) => {
-    try {
-        await syncManager.pullNow();
-        const isOnline = syncManager.isOnlineStatus();
-        const pendingCount = await syncManager.getPendingCount();
-        res.json({ success: true, isOnline, pendingCount });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-
-// Generic database sync endpoint
-app.post('/api/sync', async (req, res) => {
-    const { tableName, action, uuid, payload } = req.body;
-    
-    try {
-        const dbModels = require('./models');
-        
-        // Find corresponding Sequelize model by tableName matching
-        const modelName = Object.keys(dbModels).find(key => {
-            const m = dbModels[key];
-            return m && m.tableName === tableName;
-        });
-        
-        if (!modelName) {
-            return res.status(400).json({ error: `Model for table "${tableName}" not found` });
-        }
-        
-        const Model = dbModels[modelName];
-        
-        if (action === 'CREATE' || action === 'UPDATE') {
-            let existingRecord = await Model.findOne({ where: { uuid } });
-            
-            // Fallback: If not found by uuid, check if a record with the same primary key exists
-            if (!existingRecord) {
-                const pkValue = payload ? (payload.Id || payload.id) : null;
-                if (pkValue) {
-                    const pkRecord = await Model.findByPk(pkValue);
-                    // Only link if the existing record has NO uuid set (legacy case)
-                    if (pkRecord && (!pkRecord.uuid || pkRecord.uuid === uuid)) {
-                        existingRecord = pkRecord;
-                        console.log(`Linking existing record in table "${tableName}" with ID ${pkValue} to UUID ${uuid}`);
-                        await existingRecord.update({ uuid });
-                    }
-                }
-            }
-
-            if (existingRecord) {
-                // Update
-                const updatePayload = payload ? { ...payload } : {};
-                delete updatePayload.id;
-                delete updatePayload.Id;
-                await existingRecord.update(updatePayload);
-                res.json({ success: true, newId: existingRecord.id || existingRecord.Id });
-            } else {
-                // Create
-                const createPayload = payload ? { ...payload } : {};
-                
-                // Check if the requested ID is already taken by a record with a different UUID
-                const requestedId = createPayload.id || createPayload.Id;
-                if (requestedId) {
-                    const idClash = await Model.findByPk(requestedId);
-                    if (idClash) {
-                        // Strip clashing ID to allow database auto-increment to generate a fresh one
-                        delete createPayload.id;
-                        delete createPayload.Id;
-                        console.log(`[Sync] ID clash detected on table "${tableName}" for ID ${requestedId}. Auto-generating new ID.`);
-                    }
-                }
-                
-                const newRecord = await Model.create({ ...createPayload, uuid });
-                res.json({ success: true, newId: newRecord.id || newRecord.Id });
-            }
-        } else if (action === 'DELETE') {
-            let existingRecord = await Model.findOne({ where: { uuid } });
-            if (!existingRecord) {
-                const pkValue = payload ? (payload.Id || payload.id) : null;
-                if (pkValue) {
-                    const pkRecord = await Model.findByPk(pkValue);
-                    // Only match by ID if it has no uuid (legacy case)
-                    if (pkRecord && (!pkRecord.uuid || pkRecord.uuid === uuid)) {
-                        existingRecord = pkRecord;
-                    }
-                }
-            }
-            
-            if (existingRecord) {
-                if (Model.rawAttributes.is_deleted) {
-                    await existingRecord.update({ is_deleted: true });
-                } else {
-                    await existingRecord.destroy();
-                }
-            }
-            res.json({ success: true });
-        }
-    } catch (err) {
-        console.error(`Sync error on table "${tableName}":`, err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET endpoint to fetch all data from cloud DB for synchronization
-app.get('/api/sync/pull', async (req, res) => {
-    try {
-        const dbModels = require('./models');
-        const data = {};
-        
-        const syncableModelKeys = Object.keys(dbModels).filter(key => {
-            return key !== 'sequelize' && key !== 'SyncQueue' && key !== 'User' && key !== 'ActionLog' && key !== 'LiftingChargeRate';
-        });
-
-        for (const key of syncableModelKeys) {
-            const Model = dbModels[key];
-            // Fetch all records from MySQL
-            const records = await Model.findAll();
-            data[Model.tableName] = records;
-        }
-
-        res.json(data);
-    } catch (err) {
-        console.error('Failed to pull sync data:', err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // Database Initialization & Server Start
 async function startServer() {
     try {
@@ -204,52 +55,18 @@ async function startServer() {
         console.log('Database synchronized.');
 
         // Ensure master_settings table exists and is seeded with defaults
-        const isSqlite = sequelize.options.dialect === 'sqlite';
-        if (isSqlite) {
-            await sequelize.query(`
-                CREATE TABLE IF NOT EXISTS master_settings (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    SettingKey VARCHAR(100) NOT NULL UNIQUE,
-                    SettingValue VARCHAR(255) NOT NULL DEFAULT '',
-                    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
-            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20');`);
-            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('BusExpense', '50');`);
-            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('LatestAppVersion', '2.7.0');`);
-            await sequelize.query(`INSERT OR IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('UpdateLink', 'https://drive.google.com');`);
-            console.log('SQLite master_settings table verified/created.');
-        } else {
-            await sequelize.query(`
-                CREATE TABLE IF NOT EXISTS master_settings (
-                    Id INT AUTO_INCREMENT PRIMARY KEY,
-                    SettingKey VARCHAR(100) NOT NULL UNIQUE,
-                    SettingValue VARCHAR(255) NOT NULL DEFAULT '',
-                    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                );
-            `);
-            await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '2.7.0'), ('UpdateLink', 'https://drive.google.com');`);
-            console.log('MySQL master_settings table verified/created.');
-        }
+        await sequelize.query(`
+            CREATE TABLE IF NOT EXISTS master_settings (
+                Id INT AUTO_INCREMENT PRIMARY KEY,
+                SettingKey VARCHAR(100) NOT NULL UNIQUE,
+                SettingValue VARCHAR(255) NOT NULL DEFAULT '',
+                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            );
+        `);
+        await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '2.7.0'), ('UpdateLink', 'https://drive.google.com');`);
+        console.log('MySQL master_settings table verified/created.');
 
-
-        // 2. Initialize Sync Queue & Start background sync loop
-        const SyncQueue = require('./sync/syncQueue');
-        await SyncQueue.sync();
-        
-        // Set up IPC status callback to notify Electron main process
-        syncManager.setStatusCallback((data) => {
-            if (process.send) {
-                process.send({ type: 'sync-status-changed', data });
-            }
-        });
-
-        // Start check loop every 15 seconds
-        syncManager.startSyncLoop(15000);
-        console.log('Background sync manager loop started.');
-
-
-        // 3. Ensure Default Admin User exists
+        // 2. Ensure Default Admin User exists
         const { User } = require('./models');
         const adminCount = await User.count();
         if (adminCount === 0) {
@@ -267,7 +84,7 @@ async function startServer() {
             console.log('Default admin user created (admin/admin123)');
         }
 
-        // 4. Start listening
+        // 3. Start listening
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
         });
@@ -277,4 +94,3 @@ async function startServer() {
 }
 
 startServer();
-// Trigger nodemon restart 2

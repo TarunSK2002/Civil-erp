@@ -63,7 +63,7 @@ async function startServer() {
                 UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             );
         `);
-        await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '2.7.0'), ('UpdateLink', 'https://drive.google.com');`);
+        await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '3.0.0'), ('UpdateLink', 'https://drive.google.com');`);
         console.log('MySQL master_settings table verified/created.');
 
         // 2. Ensure Default Admin User exists

@@ -5,6 +5,8 @@ const { Op } = require('sequelize');
 
 // Helper: Synchronize dealer payee rows and grid items from site_materials
 async function syncDealerItems(sheet, transaction = null) {
+    if (sheet.Status === 'Closed') return;
+
     const selectedSiteIds = sheet.SelectedSiteIds || [];
     if (selectedSiteIds.length === 0) return;
 
@@ -43,37 +45,61 @@ async function syncDealerItems(sheet, transaction = null) {
         groups[key].purchaseIds.push(p.id);
     }
 
-    // Process each group: find/create Payee and update/create WeeklyPaySheetItem
-    const activeDealerPayeeIds = new Set();
+    const dealerNames = Object.values(groups).map(g => g.dealerName.toLowerCase());
     
+    // Find existing payees of Type = 'Supplier' in bulk
+    const payeesList = dealerNames.length > 0 ? await Payee.findAll({
+        where: {
+            Type: 'Supplier',
+            Name: {
+                [Op.in]: dealerNames
+            }
+        },
+        transaction
+    }) : [];
+
+    const payeeMap = {};
+    payeesList.forEach(p => {
+        payeeMap[p.Name.toLowerCase()] = p;
+    });
+
+    // Create missing payees
     for (const key of Object.keys(groups)) {
-        const { dealerName, siteId, netAmount, purchaseIds } = groups[key];
-
-        // Find or create Payee of Type = 'Supplier' (case-insensitive)
-        let payee = await Payee.findOne({
-            where: sequelize.where(sequelize.fn('lower', sequelize.col('Name')), dealerName.toLowerCase()),
-            transaction
-        });
-
-        if (!payee) {
-            payee = await Payee.create({
+        const { dealerName } = groups[key];
+        const lowerName = dealerName.toLowerCase();
+        if (!payeeMap[lowerName]) {
+            const payee = await Payee.create({
                 Name: dealerName,
                 Type: 'Supplier'
             }, { transaction });
             console.log(`Auto-created Supplier Payee: ${dealerName} (${payee.id})`);
+            payeeMap[lowerName] = payee;
         }
+    }
 
+    // Find all WeeklyPaySheetItems of SourceType = 'Material' for this sheet in bulk
+    const existingMaterialItems = await WeeklyPaySheetItem.findAll({
+        where: {
+            WeeklyPaySheetId: sheet.id,
+            SourceType: 'Material'
+        },
+        transaction
+    });
+
+    const itemsMap = {};
+    existingMaterialItems.forEach(item => {
+        itemsMap[`${item.PayeeId}_${item.SiteId}`] = item;
+    });
+
+    const activeDealerPayeeIds = new Set();
+    
+    for (const key of Object.keys(groups)) {
+        const { dealerName, siteId, netAmount, purchaseIds } = groups[key];
+        const payee = payeeMap[dealerName.toLowerCase()];
         activeDealerPayeeIds.add(payee.id);
 
-        // Find or create WeeklyPaySheetItem for this sheet, payee, and site
-        let item = await WeeklyPaySheetItem.findOne({
-            where: {
-                WeeklyPaySheetId: sheet.id,
-                PayeeId: payee.id,
-                SiteId: siteId
-            },
-            transaction
-        });
+        const itemKey = `${payee.id}_${siteId}`;
+        const item = itemsMap[itemKey];
 
         if (item) {
             // Update item if it's pending and not skipped
@@ -104,16 +130,7 @@ async function syncDealerItems(sheet, transaction = null) {
         }
     }
 
-    // Find all WeeklyPaySheetItems of SourceType = 'Material' for this sheet.
-    // If they are not in our current groups, and they are Pending and not skipped, delete them.
-    const existingMaterialItems = await WeeklyPaySheetItem.findAll({
-        where: {
-            WeeklyPaySheetId: sheet.id,
-            SourceType: 'Material'
-        },
-        transaction
-    });
-
+    // Delete pending and unskipped items that are no longer active
     for (const item of existingMaterialItems) {
         if (!activeDealerPayeeIds.has(item.PayeeId)) {
             if (item.PaymentStatus === 'Pending' && !item.IsSkipped) {

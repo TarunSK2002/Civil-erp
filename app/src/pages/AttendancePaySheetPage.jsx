@@ -303,7 +303,7 @@ const AttendancePaySheetPage = () => {
         <div className="aps-summary">
           <div className="aps-summary-card total"><div className="aps-summary-label">Date Attendance</div><div className="aps-summary-value">{fmt(totalAttendanceOnly)}</div></div>
           <div className="aps-summary-card misc"><div className="aps-summary-label">Misc Charges</div><div className="aps-summary-value" style={{color:'#00BCD4'}}>{fmt(getTotalMisc())}</div></div>
-          <div className="aps-summary-card info"><div className="aps-summary-label">Sites × Masons</div><div className="aps-summary-value">{sheetData.sites?.length||0} × {sheetData.payees?.length||0}</div></div>
+          <div className="aps-summary-card info"><div className="aps-summary-label">Sites × Labour</div><div className="aps-summary-value">{sheetData.sites?.length||0} × {sheetData.payees?.length||0}</div></div>
         </div>
       )}
 
@@ -314,7 +314,7 @@ const AttendancePaySheetPage = () => {
           {sheets.map(s => <option key={s.id} value={s.id}>{s.Title} ({new Date(s.WeekStartDate).toLocaleDateString('en-IN')} - {new Date(s.WeekEndDate).toLocaleDateString('en-IN')})</option>)}
         </select>
         {selectedSheetId && <>
-          <button className="aps-btn aps-btn-secondary aps-btn-sm" onClick={() => setShowAddPayeeModal(true)}><Users size={14} /> Masons</button>
+          <button className="aps-btn aps-btn-secondary aps-btn-sm" onClick={() => setShowAddPayeeModal(true)}><Users size={14} /> Labours</button>
           <button className="aps-btn aps-btn-secondary aps-btn-sm" onClick={() => setShowAddSiteModal(true)}><Building2 size={14} /> Sites</button>
           <button className="aps-btn aps-btn-danger aps-btn-sm" onClick={handleDeleteSheet}><Trash2 size={14} /></button>
         </>}
@@ -337,10 +337,10 @@ const AttendancePaySheetPage = () => {
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)' }}>2. Mason</label>
+            <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)' }}>2. Labours</label>
             <select value={entryPayeeId} onChange={e => setEntryPayeeId(e.target.value)}
               style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minWidth: 160 }}>
-              <option value="">Select mason...</option>
+              <option value="">Select labour...</option>
               {sheetData.payees.map(p => <option key={p.id} value={p.id}>{p.Name}</option>)}
             </select>
           </div>
@@ -367,17 +367,17 @@ const AttendancePaySheetPage = () => {
         <div className="aps-empty">
           <div className="aps-empty-icon"><Table2 size={36} /></div>
           <h3>{!sheetData?.payees?.length && !sheetData?.sites?.length ? 'Empty Sheet' : !sheetData?.sites?.length ? 'No Sites' : 'No Masons'}</h3>
-          <p>Add sites and masons to build the attendance grid.</p>
+          <p>Add sites and labours to build the attendance grid.</p>
           <div style={{ display: 'flex', gap: 12 }}>
             {!sheetData?.sites?.length && <button className="aps-btn aps-btn-secondary" onClick={() => setShowAddSiteModal(true)}><Building2 size={18} /> Add Sites</button>}
-            {!sheetData?.payees?.length && <button className="aps-btn aps-btn-primary" onClick={() => setShowAddPayeeModal(true)}><Users size={18} /> Add Masons</button>}
+            {!sheetData?.payees?.length && <button className="aps-btn aps-btn-primary" onClick={() => setShowAddPayeeModal(true)}><Users size={18} /> Add Labours</button>}
           </div>
         </div>
       ) : (
         <div className="aps-grid-wrapper">
           <table className="aps-grid">
             <thead><tr>
-              <th>Mason</th>
+              <th>Labour</th>
               {sheetData.sites.map(site => <th key={site.id}><div className="aps-site-header"><span className="aps-site-name">{site.SiteName}</span></div></th>)}
               <th>TOTAL</th>
             </tr></thead>
@@ -457,7 +457,7 @@ const AttendancePaySheetPage = () => {
       {showAddPayeeModal && (
         <div className="aps-modal-overlay" onClick={() => { setShowAddPayeeModal(false); setPayeeSearch(''); }}>
           <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', maxHeight: '90vh', overflowY: 'auto', margin: 'auto' }}>
-            <h2>Add Masons</h2>
+            <h2>Add Labours</h2>
             <div style={{ marginBottom: 12 }}>
               <input type="text" placeholder="Search masons..." value={payeeSearch} onChange={e => setPayeeSearch(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', outline: 'none', fontSize: 13 }} />
@@ -476,7 +476,7 @@ const AttendancePaySheetPage = () => {
             </div>
             <div className="aps-modal-actions">
               <button className="aps-btn aps-btn-secondary" onClick={() => { setShowAddPayeeModal(false); setPayeeSearch(''); }}>Cancel</button>
-              <button className="aps-btn aps-btn-primary" onClick={handleAddPayees}>Update Masons</button>
+              <button className="aps-btn aps-btn-primary" onClick={handleAddPayees}>Update Labours</button>
             </div>
           </div>
         </div>

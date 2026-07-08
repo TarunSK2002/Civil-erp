@@ -9,19 +9,35 @@ const { Op } = require('sequelize');
 // @desc    List all attendance sheets with summaries
 router.get('/', async (req, res) => {
     try {
+        const isSqlite = sequelize.options.dialect === 'sqlite';
+        const foreignKey = isSqlite ? 'attendance_sheet_id' : 'AttendanceSheetId';
+        const primaryKey = isSqlite ? 'id' : 'Id';
+        const calculatedAmountField = isSqlite ? 'calculated_amount' : 'CalculatedAmount';
+        const amountField = isSqlite ? 'amount' : 'Amount';
+
         const sheets = await AttendanceSheet.findAll({
             order: [['WeekStartDate', 'DESC']],
-            include: [
-                { model: AttendanceRecord, as: 'Records', attributes: ['id', 'CalculatedAmount'] },
-                { model: AttendanceMisc, as: 'Miscs', attributes: ['id', 'Amount'] }
+            attributes: [
+                'id', 'Title', 'WeekStartDate', 'WeekEndDate', 'Status', 'CreatedAt', 'SelectedPayeeIds', 'SelectedSiteIds',
+                [
+                    sequelize.literal(`(SELECT COALESCE(SUM(${calculatedAmountField}), 0) FROM attendance_records WHERE attendance_records.${foreignKey} = AttendanceSheet.${primaryKey})`),
+                    'totalAttendance'
+                ],
+                [
+                    sequelize.literal(`(SELECT COALESCE(SUM(${amountField}), 0) FROM attendance_miscs WHERE attendance_miscs.${foreignKey} = AttendanceSheet.${primaryKey})`),
+                    'totalMisc'
+                ],
+                [
+                    sequelize.literal(`(SELECT COUNT(*) FROM attendance_records WHERE attendance_records.${foreignKey} = AttendanceSheet.${primaryKey})`),
+                    'recordCount'
+                ]
             ]
         });
 
         const result = sheets.map(sheet => {
-            const records = sheet.Records || [];
-            const miscs = sheet.Miscs || [];
-            const totalAttendance = records.reduce((sum, r) => sum + parseFloat(r.CalculatedAmount || 0), 0);
-            const totalMisc = miscs.reduce((sum, m) => sum + parseFloat(m.Amount || 0), 0);
+            const totalAttendance = parseFloat(sheet.getDataValue('totalAttendance') || 0);
+            const totalMisc = parseFloat(sheet.getDataValue('totalMisc') || 0);
+            const recordCount = parseInt(sheet.getDataValue('recordCount') || 0);
             return {
                 id: sheet.id,
                 Title: sheet.Title,
@@ -32,7 +48,7 @@ router.get('/', async (req, res) => {
                 totalAmount: totalAttendance + totalMisc,
                 totalAttendance,
                 totalMisc,
-                recordCount: records.length,
+                recordCount,
                 payeeCount: (sheet.SelectedPayeeIds || []).length,
                 siteCount: (sheet.SelectedSiteIds || []).length
             };

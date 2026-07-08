@@ -29,6 +29,14 @@ const AttendanceMisc = sequelize.define('AttendanceMisc', {
         type: DataTypes.INTEGER,
         allowNull: true
     },
+    CreatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    UpdatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

@@ -44,6 +44,14 @@ const Payment = sequelize.define('Payment', {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
     },
+    CreatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    UpdatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

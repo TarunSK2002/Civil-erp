@@ -80,6 +80,14 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
         allowNull: false,
         defaultValue: 0
     },
+    CreatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    UpdatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

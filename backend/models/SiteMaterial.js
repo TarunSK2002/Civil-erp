@@ -74,6 +74,14 @@ const SiteMaterial = sequelize.define('SiteMaterial', {
         type: DataTypes.INTEGER,
         allowNull: true
     },
+    CreatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    UpdatedByUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     PurchaseDate: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

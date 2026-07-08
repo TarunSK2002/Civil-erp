@@ -57,6 +57,10 @@ const ActionLog = sequelize.define('ActionLog', {
         allowNull: false,
         defaultValue: false
     },
+    UserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

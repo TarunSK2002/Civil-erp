@@ -180,6 +180,7 @@ const PersonTypeMasterPage = () => {
               transition: 'background 0.2s, border 0.2s, opacity 0.2s',
               opacity: type.IsActive ? 1 : 0.6,
               overflow: 'hidden',
+              height: 'max-content',
               minHeight: 'max-content'
             }}>
               {/* Top accent bar */}

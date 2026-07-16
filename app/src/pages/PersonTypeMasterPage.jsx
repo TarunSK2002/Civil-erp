@@ -179,15 +179,15 @@ const PersonTypeMasterPage = () => {
               padding: '20px 24px',
               transition: 'background 0.2s, border 0.2s, opacity 0.2s',
               opacity: type.IsActive ? 1 : 0.6,
+              overflow: 'hidden',
+              minHeight: 'max-content'
             }}>
               {/* Top accent bar */}
               <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0, height: 3,
                 background: type.IsActive
                   ? `linear-gradient(90deg, ${c.accent}, ${c.color})`
-                  : 'var(--border)',
-                borderTopLeftRadius: 13,
-                borderTopRightRadius: 13
+                  : 'var(--border)'
               }} />
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>

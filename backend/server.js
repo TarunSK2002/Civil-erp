@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 require('dotenv').config();
 
 // Default fallbacks for packaged app where .env might not be included
@@ -10,38 +11,62 @@ process.env.DB_HOST = process.env.DB_HOST || '127.0.0.1';
 process.env.PORT = process.env.PORT || 5000;
 
 const { sequelize } = require('./models');
+const { verifyToken } = require('./middleware/auth');
+const { generalLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// Security Middlewares
+app.use(helmet());
+
+// CORS config
+const whitelist = [
+  'http://localhost:3000', 
+  'http://localhost:5173', 
+  'http://localhost:8080'
+];
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || whitelist.indexOf(origin) !== -1 || origin.startsWith('http://localhost:')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+};
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Global Rate Limiter
+app.use(generalLimiter);
 
 // Routes
 app.get('/health', (req, res) => res.json({ status: 'OK' }));
 
 app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/clients', require('./routes/clientRoutes'));
-app.use('/api/sites', require('./routes/siteRoutes'));
-app.use('/api/labours', require('./routes/labourRoutes'));
-app.use('/api/materials', require('./routes/materialRoutes'));
-app.use('/api/site-materials', require('./routes/siteMaterialRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
-app.use('/api/admin', require('./routes/adminRoutes'));
-app.use('/api/dashboard', require('./routes/dashboardRoutes'));
-app.use('/api/payees', require('./routes/payeeRoutes'));
-app.use('/api/weekly-pay-sheets', require('./routes/weeklyPaySheetRoutes'));
-app.use('/api/reports', require('./routes/reportRoutes'));
-app.use('/api/shift-master', require('./routes/shiftMasterRoutes'));
-app.use('/api/attendance-sheets', require('./routes/attendanceRoutes'));
-app.use('/api/person-types', require('./routes/personTypeRoutes'));
-app.use('/api/material-types', require('./routes/materialTypeRoutes'));
-app.use('/api/petty-cash', require('./routes/pettyCashRoutes'));
-app.use('/api/personal-expenses', require('./routes/personalExpenseRoutes'));
-app.use('/api/master-settings', require('./routes/masterSettingsRoutes'));
-app.use('/api/undo', require('./routes/undoRoutes'));
-app.use('/api/site-sections', require('./routes/siteSectionRoutes'));
-app.use('/api/site-projects', require('./routes/siteProjectRoutes'));
+app.use('/api/clients', verifyToken, require('./routes/clientRoutes'));
+app.use('/api/sites', verifyToken, require('./routes/siteRoutes'));
+app.use('/api/labours', verifyToken, require('./routes/labourRoutes'));
+app.use('/api/materials', verifyToken, require('./routes/materialRoutes'));
+app.use('/api/site-materials', verifyToken, require('./routes/siteMaterialRoutes'));
+app.use('/api/payments', verifyToken, require('./routes/paymentRoutes'));
+app.use('/api/admin', verifyToken, require('./routes/adminRoutes'));
+app.use('/api/dashboard', verifyToken, require('./routes/dashboardRoutes'));
+app.use('/api/payees', verifyToken, require('./routes/payeeRoutes'));
+app.use('/api/weekly-pay-sheets', verifyToken, require('./routes/weeklyPaySheetRoutes'));
+app.use('/api/reports', verifyToken, require('./routes/reportRoutes'));
+app.use('/api/shift-master', verifyToken, require('./routes/shiftMasterRoutes'));
+app.use('/api/attendance-sheets', verifyToken, require('./routes/attendanceRoutes'));
+app.use('/api/person-types', verifyToken, require('./routes/personTypeRoutes'));
+app.use('/api/material-types', verifyToken, require('./routes/materialTypeRoutes'));
+app.use('/api/petty-cash', verifyToken, require('./routes/pettyCashRoutes'));
+app.use('/api/personal-expenses', verifyToken, require('./routes/personalExpenseRoutes'));
+app.use('/api/master-settings', verifyToken, require('./routes/masterSettingsRoutes'));
+app.use('/api/undo', verifyToken, require('./routes/undoRoutes'));
+app.use('/api/site-sections', verifyToken, require('./routes/siteSectionRoutes'));
+app.use('/api/site-projects', verifyToken, require('./routes/siteProjectRoutes'));
 
 // Database Initialization & Server Start
 async function startServer() {
@@ -81,7 +106,8 @@ async function startServer() {
                 UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             );
         `);
-        await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '3.0.0'), ('UpdateLink', 'https://drive.google.com');`);
+        await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '3.2.0'), ('UpdateLink', 'https://drive.google.com');`);
+        await sequelize.query(`UPDATE master_settings SET SettingValue = '3.2.0' WHERE SettingKey = 'LatestAppVersion';`);
         console.log('MySQL master_settings table verified/created.');
 
         // 2. Ensure Default Admin User exists

@@ -402,7 +402,10 @@ router.post('/:id/records', async (req, res) => {
             const personTypeRecord = await PersonType.findOne({
                 where: { Name: personTypeName || 'Mason' }
             });
-            const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+            let dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+            if (personTypeRecord && personTypeRecord.RateUnit === 'Hour') {
+                dailyRate = dailyRate * 8; // Convert hourly rate to equivalent 8-hour daily rate for shift mode
+            }
             rate = dailyRate * parseFloat(ShiftMultiplier || 1);
             calculatedAmount = parseInt(LabourCount || 1) * rate;
         } else if (mode === 'Hour') {
@@ -467,7 +470,10 @@ router.put('/:id/records/:recordId', async (req, res) => {
             const personTypeRecord = await PersonType.findOne({
                 where: { Name: personTypeName || record.PersonType }
             });
-            const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+            let dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
+            if (personTypeRecord && personTypeRecord.RateUnit === 'Hour') {
+                dailyRate = dailyRate * 8; // Convert hourly rate to equivalent 8-hour daily rate for shift mode
+            }
             rate = dailyRate * parseFloat(ShiftMultiplier !== undefined ? ShiftMultiplier : record.ShiftMultiplier);
             calculatedAmount = parseInt(LabourCount !== undefined ? LabourCount : record.LabourCount) * rate;
         } else if (mode === 'Hour') {

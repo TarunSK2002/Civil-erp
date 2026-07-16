@@ -275,8 +275,17 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
   const selectedShift = shiftTypes.find(s => String(s.id) === String(newShift.shiftId));
   const selectedPersonType = personTypes.find(pt => pt.Name === newShift.personType);
+  
+  let baseRate = 0;
+  if (selectedPersonType) {
+    baseRate = parseFloat(selectedPersonType.DailyRate || 0);
+    if (selectedPersonType.RateUnit === 'Hour') {
+      baseRate = baseRate * 8; // Convert hourly rate to equivalent 8-hour daily rate for shift mode estimate
+    }
+  }
+
   const estimatedAmount = selectedShift && selectedPersonType
-    ? parseFloat(selectedPersonType.DailyRate || 0) * parseFloat(selectedShift.ShiftMultiplier) * parseInt(newShift.labourCount || 1)
+    ? baseRate * parseFloat(selectedShift.ShiftMultiplier) * parseInt(newShift.labourCount || 1)
     : 0;
 
   const handleAddRecord = async () => {

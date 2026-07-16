@@ -94,12 +94,15 @@ router.put('/:id', async (req, res) => {
             });
 
             for (const record of records) {
-                const newCalculated = newRate * parseFloat(record.ShiftMultiplier) * record.LabourCount;
-                await record.update({
-                    RatePerShift: newRate,
-                    CalculatedAmount: newCalculated
-                }, { transaction: t });
-                updatedRecords++;
+                if (record.CalculationMode === 'Shift') {
+                    const effectiveRate = type.RateUnit === 'Hour' ? (newRate * 8) : newRate;
+                    const newCalculated = effectiveRate * parseFloat(record.ShiftMultiplier) * record.LabourCount;
+                    await record.update({
+                        RatePerShift: effectiveRate,
+                        CalculatedAmount: newCalculated
+                    }, { transaction: t });
+                    updatedRecords++;
+                }
             }
 
             // Recalculate WeeklyPaySheetItem amounts for non-Paid items
@@ -238,12 +241,15 @@ router.post('/:id/update-rate', async (req, res) => {
         for (const record of records) {
             // Check if the linked weekly pay sheet item is confirmed (Paid)
             // We recalculate regardless — the weekly sheet import will pick up the new totals
-            const newCalculated = newRate * parseFloat(record.ShiftMultiplier) * record.LabourCount;
-            await record.update({
-                RatePerShift: newRate,
-                CalculatedAmount: newCalculated
-            }, { transaction: t });
-            updatedRecords++;
+            if (record.CalculationMode === 'Shift') {
+                const effectiveRate = type.RateUnit === 'Hour' ? (newRate * 8) : newRate;
+                const newCalculated = effectiveRate * parseFloat(record.ShiftMultiplier) * record.LabourCount;
+                await record.update({
+                    RatePerShift: effectiveRate,
+                    CalculatedAmount: newCalculated
+                }, { transaction: t });
+                updatedRecords++;
+            }
         }
 
         // 3. Recalculate WeeklyPaySheetItem amounts for non-Paid items

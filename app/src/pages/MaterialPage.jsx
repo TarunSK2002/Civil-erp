@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, X, Store, Phone, CreditCard, Loader2, Package, Check, IndianRupee, Pencil } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Store, Phone, CreditCard, Loader2, Package, Check, IndianRupee, Pencil, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const UNITS = [
   'nos', 'unit', 'kg', 'litr', 'running feet', 'ton', 'bill',
@@ -190,6 +191,17 @@ const MaterialPage = () => {
     ? dealers
     : dealers.filter(d => d.MaterialTypeId === parseInt(typeFilter));
 
+  const { items: sortedDealers, requestSort, sortConfig } = useSortableData(filteredDealers);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
+
   return (
     <div className="data-page" style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -279,20 +291,30 @@ const MaterialPage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>SHOP NAME</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>DEALER NAME</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>MATERIAL TYPE</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>MOBILE NO</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>ACCOUNT NO</th>
+              <th onClick={() => requestSort('Name')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                SHOP NAME {getSortIcon('Name')}
+              </th>
+              <th onClick={() => requestSort('DealerName')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                DEALER NAME {getSortIcon('DealerName')}
+              </th>
+              <th onClick={() => requestSort('MaterialType.Name')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                MATERIAL TYPE {getSortIcon('MaterialType.Name')}
+              </th>
+              <th onClick={() => requestSort('MobileNo')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                MOBILE NO {getSortIcon('MobileNo')}
+              </th>
+              <th onClick={() => requestSort('AccountNo')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                ACCOUNT NO {getSortIcon('AccountNo')}
+              </th>
               <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
-            ) : filteredDealers.length === 0 ? (
+            ) : sortedDealers.length === 0 ? (
               <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No dealers found</td></tr>
-            ) : filteredDealers.map(dealer => (
+            ) : sortedDealers.map(dealer => (
               <tr key={dealer.id} style={{ borderBottom: '1px solid var(--border)', transition: 'var(--transition)' }}>
                 <td style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

@@ -25,6 +25,8 @@ const PersonTypeMasterPage = () => {
   const [editName, setEditName] = useState('');
   const [editRate, setEditRate] = useState('');
   const [newRate, setNewRate] = useState('');
+  const [newRateUnit, setNewRateUnit] = useState('Day');
+  const [editRateUnit, setEditRateUnit] = useState('Day');
 
   useEffect(() => {
     fetchTypes();
@@ -50,9 +52,10 @@ const PersonTypeMasterPage = () => {
   const handleAdd = async () => {
     if (!newName.trim()) return;
     try {
-      await api.post('/person-types', { Name: newName.trim(), DailyRate: parseFloat(newRate) || 0 });
+      await api.post('/person-types', { Name: newName.trim(), DailyRate: parseFloat(newRate) || 0, RateUnit: newRateUnit });
       setNewName('');
       setNewRate('');
+      setNewRateUnit('Day');
       setShowAddForm(false);
       fetchTypes();
     } catch (err) {
@@ -63,10 +66,11 @@ const PersonTypeMasterPage = () => {
   const handleUpdate = async (id) => {
     if (!editName.trim()) return;
     try {
-      await api.put(`/person-types/${id}`, { Name: editName.trim(), DailyRate: parseFloat(editRate) || 0 });
+      await api.put(`/person-types/${id}`, { Name: editName.trim(), DailyRate: parseFloat(editRate) || 0, RateUnit: editRateUnit });
       setEditingId(null);
       setEditName('');
       setEditRate('');
+      setEditRateUnit('Day');
       fetchTypes();
     } catch (err) {
       alert(err.response?.data?.msg || 'Failed to update');
@@ -168,14 +172,14 @@ const PersonTypeMasterPage = () => {
 
           return (
             <div key={type.id} style={{
+              position: 'relative',
               background: type.IsActive ? c.bg : 'rgba(100,100,100,0.04)',
               border: `1px solid ${type.IsActive ? c.border : 'var(--border)'}`,
               borderRadius: 14,
               padding: '20px 24px',
-              position: 'relative',
+              transition: 'background 0.2s, border 0.2s, opacity 0.2s',
+              opacity: type.IsActive ? 1 : 0.6,
               overflow: 'hidden',
-              transition: 'all 0.2s',
-              opacity: type.IsActive ? 1 : 0.6
             }}>
               {/* Top accent bar */}
               <div style={{
@@ -207,7 +211,7 @@ const PersonTypeMasterPage = () => {
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                          Daily Rate (₹)
+                          Rate (₹)
                         </label>
                         <input
                           type="number"
@@ -220,13 +224,31 @@ const PersonTypeMasterPage = () => {
                           }}
                         />
                       </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                          Rate Type
+                        </label>
+                        <select
+                          value={editRateUnit}
+                          onChange={e => setEditRateUnit(e.target.value)}
+                          style={{
+                            width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)',
+                            borderRadius: 8, padding: '8px 10px', color: 'var(--text-primary)',
+                            fontSize: 14, fontWeight: 600, outline: 'none', fontFamily: 'inherit'
+                          }}
+                        >
+                          <option value="Day">Day</option>
+                          <option value="Hour">Hour</option>
+                        </select>
+                      </div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                         <button
                           onClick={() => handleUpdate(type.id)}
                           style={{
-                            flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            background: 'var(--accent)', border: 'none', color: '#0F0F1A', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4
+                            flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            background: '#4CAF50', border: 'none', color: 'white', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                            boxShadow: '0 2px 6px rgba(76, 175, 80, 0.15)'
                           }}
                         >
                           <Check size={14} /> Save
@@ -235,8 +257,8 @@ const PersonTypeMasterPage = () => {
                           onClick={() => { setEditingId(null); setEditName(''); setEditRate(''); }}
                           style={{
                             padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            background: 'rgba(244, 67, 54, 0.1)', border: '1px solid rgba(244, 67, 54, 0.2)',
-                            color: '#F44336', cursor: 'pointer'
+                            background: 'rgba(244, 67, 54, 0.08)', border: '1px solid rgba(244, 67, 54, 0.25)',
+                            color: '#F55353', cursor: 'pointer'
                           }}
                         >
                           Cancel
@@ -268,7 +290,7 @@ const PersonTypeMasterPage = () => {
                           display: 'flex', alignItems: 'center', gap: 2
                         }}>
                           <IndianRupee size={11} />
-                          {parseFloat(type.DailyRate || 0).toLocaleString('en-IN')}/day
+                          {parseFloat(type.DailyRate || 0).toLocaleString('en-IN')}/{type.RateUnit === 'Hour' ? 'hour' : 'day'}
                         </div>
                       </div>
                     </>
@@ -291,7 +313,7 @@ const PersonTypeMasterPage = () => {
               {!isEditing && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
-                    onClick={() => { setEditingId(type.id); setEditName(type.Name); setEditRate(type.DailyRate || 0); }}
+                    onClick={() => { setEditingId(type.id); setEditName(type.Name); setEditRate(type.DailyRate || 0); setEditRateUnit(type.RateUnit || 'Day'); }}
                     style={{
                       flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 12,
                       fontWeight: 600, border: `1px solid ${type.IsActive ? c.border : 'var(--border)'}`,
@@ -364,7 +386,7 @@ const PersonTypeMasterPage = () => {
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                Daily Rate (₹)
+                Rate (₹)
               </label>
               <input
                 type="number"
@@ -379,9 +401,26 @@ const PersonTypeMasterPage = () => {
                 }}
               />
             </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                Rate Type
+              </label>
+              <select
+                value={newRateUnit}
+                onChange={e => setNewRateUnit(e.target.value)}
+                style={{
+                  width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)',
+                  borderRadius: 10, padding: '10px 14px', color: 'var(--text-primary)',
+                  fontSize: 14, outline: 'none', fontFamily: 'inherit'
+                }}
+              >
+                <option value="Day">Day</option>
+                <option value="Hour">Hour</option>
+              </select>
+            </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
               <button
-              onClick={() => { setShowAddForm(false); setNewName(''); setNewRate(''); }}
+              onClick={() => { setShowAddForm(false); setNewName(''); setNewRate(''); setNewRateUnit('Day'); }}
                 style={{
                   flex: 1, padding: 12, borderRadius: 10, fontSize: 13, fontWeight: 600,
                   background: 'transparent', border: '1px solid var(--border)',

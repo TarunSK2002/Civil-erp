@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ArrowLeft, Pencil, Trash2, ChevronRight, Check, X, Loader2, HardHat, Package } from 'lucide-react';
+import { Plus, ArrowLeft, Pencil, Trash2, ChevronRight, Check, X, Loader2, HardHat, Package, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const fmt = (num) => {
   if (!num && num !== 0) return '—';
@@ -9,12 +10,25 @@ const fmt = (num) => {
 
 const SiteReportView = ({ sites }) => {
   const [selectedSiteId, setSelectedSiteId] = useState('');
-  const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [subView, setSubView] = useState('summary'); // summary | labour-detail | material-detail
   const [drillData, setDrillData] = useState(null);
   const [drillLoading, setDrillLoading] = useState(false);
   const [rentalAmount, setRentalAmount] = useState(0);
+  const [reportData, setReportData] = useState(null);
+
+  const { items: sortedWorkItems, requestSort: sortWorkItems, sortConfig: workItemsSort } = useSortableData(reportData?.workItems || []);
+  const { items: sortedDrillLabours, requestSort: sortDrillLabours, sortConfig: drillLaboursSort } = useSortableData(drillData?.labours || []);
+  const { items: sortedDrillMaterials, requestSort: sortDrillMaterials, sortConfig: drillMaterialsSort } = useSortableData(drillData?.materials || []);
+
+  const getSortIcon = (sortConfig, key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={12} style={{ marginLeft: '4px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   // Work value editing
   const [editingId, setEditingId] = useState(null);
@@ -118,9 +132,16 @@ const SiteReportView = ({ sites }) => {
         </div>
         <div className="report-section">
           <table className="report-table">
-            <thead><tr><th>Labour Name</th><th>Type</th><th style={{ textAlign: 'right' }}>Total Paid</th><th style={{ textAlign: 'right' }}>Payments</th></tr></thead>
+            <thead>
+              <tr>
+                <th onClick={() => sortDrillLabours('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Labour Name {getSortIcon(drillLaboursSort, 'name')}</th>
+                <th onClick={() => sortDrillLabours('type')} style={{ cursor: 'pointer', userSelect: 'none' }}>Type {getSortIcon(drillLaboursSort, 'type')}</th>
+                <th onClick={() => sortDrillLabours('totalPaid')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>Total Paid {getSortIcon(drillLaboursSort, 'totalPaid')}</th>
+                <th onClick={() => sortDrillLabours('paymentCount')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>Payments {getSortIcon(drillLaboursSort, 'paymentCount')}</th>
+              </tr>
+            </thead>
             <tbody>
-              {drillData?.labours?.map((l, i) => (
+              {sortedDrillLabours.map((l, i) => (
                 <tr key={i}><td style={{ fontWeight: 600 }}>{l.name}</td><td><span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '3px 8px', borderRadius: 5 }}>{l.type}</span></td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(l.totalPaid)}</td><td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{l.paymentCount}</td></tr>
               ))}
               {drillData?.labours?.length > 0 && (
@@ -151,9 +172,15 @@ const SiteReportView = ({ sites }) => {
         </div>
         <div className="report-section">
           <table className="report-table">
-            <thead><tr><th>Material</th><th style={{ textAlign: 'right' }}>Total Amount</th><th style={{ textAlign: 'right' }}>Purchases</th></tr></thead>
+            <thead>
+              <tr>
+                <th onClick={() => sortDrillMaterials('materialName')} style={{ cursor: 'pointer', userSelect: 'none' }}>Material {getSortIcon(drillMaterialsSort, 'materialName')}</th>
+                <th onClick={() => sortDrillMaterials('totalAmount')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>Total Amount {getSortIcon(drillMaterialsSort, 'totalAmount')}</th>
+                <th onClick={() => sortDrillMaterials('purchaseCount')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>Purchases {getSortIcon(drillMaterialsSort, 'purchaseCount')}</th>
+              </tr>
+            </thead>
             <tbody>
-              {drillData?.materials?.map((m, i) => (
+              {sortedDrillMaterials.map((m, i) => (
                 <tr key={i}><td style={{ fontWeight: 600 }}>{m.materialName}</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(m.totalAmount)}</td><td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{m.purchaseCount}</td></tr>
               ))}
               {drillData?.materials?.length > 0 && (
@@ -202,9 +229,15 @@ const SiteReportView = ({ sites }) => {
               <button className="report-btn-add" onClick={() => { setAddingNew(true); setNewForm({ WorkName: '', Value: '' }); }}><Plus size={14} /> Add Item</button>
             </div>
             <table className="report-table">
-              <thead><tr><th>Work Name</th><th style={{ textAlign: 'right' }}>Value (₹)</th><th style={{ width: 100 }}>Action</th></tr></thead>
+              <thead>
+                <tr>
+                  <th onClick={() => sortWorkItems('WorkName')} style={{ cursor: 'pointer', userSelect: 'none' }}>Work Name {getSortIcon(workItemsSort, 'WorkName')}</th>
+                  <th onClick={() => sortWorkItems('Value')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>Value (₹) {getSortIcon(workItemsSort, 'Value')}</th>
+                  <th style={{ width: 100 }}>Action</th>
+                </tr>
+              </thead>
               <tbody>
-                {reportData.workItems.map(item => (
+                {sortedWorkItems.map(item => (
                   editingId === item.id ? (
                     <tr key={item.id} className="work-value-edit-row">
                       <td><input value={editForm.WorkName} onChange={e => setEditForm({ ...editForm, WorkName: e.target.value })} placeholder="Work name" autoFocus /></td>

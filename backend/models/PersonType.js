@@ -28,6 +28,11 @@ const PersonType = sequelize.define('PersonType', {
         allowNull: false,
         defaultValue: 0
     },
+    RateUnit: {
+        type: DataTypes.STRING(10),
+        allowNull: false,
+        defaultValue: 'Day'
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

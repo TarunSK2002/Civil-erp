@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Home, Users, Ruler, MapPin, HardHat, Package,
   IndianRupee, CheckCircle2, Clock, Loader2, Calendar, FileText, RotateCcw,
-  Plus, Trash2, Edit, Check, X
+  Plus, Trash2, Edit, Check, X, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 import './SiteDetailPage.css';
 
 const fmt = (num) => {
@@ -18,6 +19,20 @@ const SiteDetailPage = () => {
   const navigate = useNavigate();
   const [site, setSite] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const { items: sortedRecentPayments, requestSort: sortRecentPayments, sortConfig: recentPaymentsSort } = useSortableData(site?.RecentPayments || []);
+  const { items: sortedReportPayments, requestSort: sortReportPayments, sortConfig: reportPaymentsSort } = useSortableData(paymentReport?.payments || []);
+  const { items: sortedSections, requestSort: sortSections, sortConfig: sectionsSort } = useSortableData(sections);
+  const { items: sortedProjects, requestSort: sortProjects, sortConfig: projectsSort } = useSortableData(projects);
+
+  const getSortIcon = (sortConfig, key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={12} style={{ marginLeft: '4px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   // Tabs state
   const [activeTab, setActiveTab] = useState('summary'); // 'summary' | 'sections' | 'projects'
@@ -492,15 +507,15 @@ const SiteDetailPage = () => {
                 <table className="site-payment-table">
                   <thead>
                     <tr>
-                      <th>S.No</th>
-                      <th>Date</th>
-                      <th>Amount</th>
-                      <th>Mode</th>
-                      <th>Notes</th>
+                      <th style={{ cursor: 'pointer', userSelect: 'none' }}>S.No</th>
+                      <th onClick={() => sortRecentPayments('PaymentDate')} style={{ cursor: 'pointer', userSelect: 'none' }}>Date {getSortIcon(recentPaymentsSort, 'PaymentDate')}</th>
+                      <th onClick={() => sortRecentPayments('Amount')} style={{ cursor: 'pointer', userSelect: 'none' }}>Amount {getSortIcon(recentPaymentsSort, 'Amount')}</th>
+                      <th onClick={() => sortRecentPayments('PaymentMode')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mode {getSortIcon(recentPaymentsSort, 'PaymentMode')}</th>
+                      <th onClick={() => sortRecentPayments('Notes')} style={{ cursor: 'pointer', userSelect: 'none' }}>Notes {getSortIcon(recentPaymentsSort, 'Notes')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {site.RecentPayments.map((p, idx) => (
+                    {sortedRecentPayments.map((p, idx) => (
                       <tr key={p.id || p.Id || idx}>
                         <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
                         <td>{new Date(p.PaymentDate).toLocaleDateString('en-IN')}</td>
@@ -531,15 +546,15 @@ const SiteDetailPage = () => {
               <table className="site-payment-table">
                 <thead>
                   <tr>
-                    <th>S.No</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Mode</th>
-                    <th>Notes</th>
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }}>S.No</th>
+                    <th onClick={() => sortReportPayments('date')} style={{ cursor: 'pointer', userSelect: 'none' }}>Date {getSortIcon(reportPaymentsSort, 'date')}</th>
+                    <th onClick={() => sortReportPayments('amount')} style={{ cursor: 'pointer', userSelect: 'none' }}>Amount {getSortIcon(reportPaymentsSort, 'amount')}</th>
+                    <th onClick={() => sortReportPayments('mode')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mode {getSortIcon(reportPaymentsSort, 'mode')}</th>
+                    <th onClick={() => sortReportPayments('notes')} style={{ cursor: 'pointer', userSelect: 'none' }}>Notes {getSortIcon(reportPaymentsSort, 'notes')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paymentReport.payments.map((p, idx) => (
+                  {sortedReportPayments.map((p, idx) => (
                     <tr key={p.id}>
                       <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
                       <td>{new Date(p.date).toLocaleDateString('en-IN')}</td>
@@ -605,19 +620,19 @@ const SiteDetailPage = () => {
                 <Loader2 size={24} className="site-detail-spinner" />
               </div>
             ) : sections.length > 0 ? (
-              <table className="site-payment-table">
+               <table className="site-payment-table">
                 <thead>
                   <tr>
-                    <th>Floor Name</th>
-                    <th>Dimensions (L × B × H)</th>
-                    <th>Area (SqFt)</th>
-                    <th>Rate / SqFt</th>
-                    <th>Value</th>
+                    <th onClick={() => sortSections('Name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Floor Name {getSortIcon(sectionsSort, 'Name')}</th>
+                    <th onClick={() => sortSections('Length')} style={{ cursor: 'pointer', userSelect: 'none' }}>Dimensions (L × B × H) {getSortIcon(sectionsSort, 'Length')}</th>
+                    <th onClick={() => sortSections('Area')} style={{ cursor: 'pointer', userSelect: 'none' }}>Area (SqFt) {getSortIcon(sectionsSort, 'Area')}</th>
+                    <th onClick={() => sortSections('RatePerSqFt')} style={{ cursor: 'pointer', userSelect: 'none' }}>Rate / SqFt {getSortIcon(sectionsSort, 'RatePerSqFt')}</th>
+                    <th onClick={() => sortSections('SectionValue')} style={{ cursor: 'pointer', userSelect: 'none' }}>Value {getSortIcon(sectionsSort, 'SectionValue')}</th>
                     <th style={{ width: '100px', textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sections.map((sec) => (
+                  {sortedSections.map((sec) => (
                     <tr key={sec.id}>
                       <td style={{ fontWeight: 600 }}>{sec.Name}</td>
                       <td>
@@ -703,16 +718,16 @@ const SiteDetailPage = () => {
               <table className="site-payment-table">
                 <thead>
                   <tr>
-                    <th>Project Name</th>
-                    <th>Type</th>
-                    <th>Value</th>
-                    <th>Dates</th>
-                    <th>Status</th>
+                    <th onClick={() => sortProjects('ProjectName')} style={{ cursor: 'pointer', userSelect: 'none' }}>Project Name {getSortIcon(projectsSort, 'ProjectName')}</th>
+                    <th onClick={() => sortProjects('WorkType')} style={{ cursor: 'pointer', userSelect: 'none' }}>Type {getSortIcon(projectsSort, 'WorkType')}</th>
+                    <th onClick={() => sortProjects('QuotedValue')} style={{ cursor: 'pointer', userSelect: 'none' }}>Value {getSortIcon(projectsSort, 'QuotedValue')}</th>
+                    <th onClick={() => sortProjects('StartDate')} style={{ cursor: 'pointer', userSelect: 'none' }}>Dates {getSortIcon(projectsSort, 'StartDate')}</th>
+                    <th onClick={() => sortProjects('Status')} style={{ cursor: 'pointer', userSelect: 'none' }}>Status {getSortIcon(projectsSort, 'Status')}</th>
                     <th style={{ width: '100px', textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {projects.map((proj) => (
+                  {sortedProjects.map((proj) => (
                     <tr key={proj.id}>
                       <td style={{ fontWeight: 600 }}>{proj.ProjectName}</td>
                       <td><span className="payment-mode-badge">{proj.WorkType}</span></td>

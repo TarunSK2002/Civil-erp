@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IndianRupee, TrendingDown, Calendar, Search, Home, ArrowUpRight } from 'lucide-react';
+import { IndianRupee, TrendingDown, Calendar, Search, Home, ArrowUpRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const SitePaymentSummaryPage = () => {
   const [sites, setSites] = useState([]);
@@ -32,6 +33,17 @@ const SitePaymentSummaryPage = () => {
   const filteredSites = sites.filter(s => 
     searchTerm === '' || s.SiteName?.toLowerCase().includes(searchTerm.toLowerCase()) || s.Client?.Name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const { items: sortedSites, requestSort, sortConfig } = useSortableData(filteredSites);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   if (loading) {
     return <div className="data-page" style={{ padding: '24px' }}>Loading site payment summary...</div>;
@@ -87,18 +99,18 @@ const SitePaymentSummaryPage = () => {
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>SITE NAME</th>
-                <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>SITE VALUE</th>
-                <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>RECEIVED</th>
-                <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>BALANCE</th>
-                <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>COLLECTION %</th>
-                <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', textAlign: 'right' }}>ACTION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSites.map(site => {
-                const siteValue = parseFloat(site.SiteValue || 0);
+            <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+              <th onClick={() => requestSort('SiteName')} style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>SITE NAME {getSortIcon('SiteName')}</th>
+              <th onClick={() => requestSort('SiteValue')} style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>SITE VALUE {getSortIcon('SiteValue')}</th>
+              <th onClick={() => requestSort('ReceivedAmount')} style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>RECEIVED {getSortIcon('ReceivedAmount')}</th>
+              <th onClick={() => requestSort('BalanceAmount')} style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>BALANCE {getSortIcon('BalanceAmount')}</th>
+              <th onClick={() => requestSort('ReceivedAmount')} style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>COLLECTION % {getSortIcon('ReceivedAmount')}</th>
+              <th style={{ padding: '16px', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', textAlign: 'right' }}>ACTION</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedSites.map(site => {
+              const siteValue = parseFloat(site.SiteValue || 0);
                 const received = parseFloat(site.ReceivedAmount || 0);
                 const balance = parseFloat(site.BalanceAmount || 0);
                 const pct = siteValue > 0 ? Math.min((received / siteValue) * 100, 100) : 0;

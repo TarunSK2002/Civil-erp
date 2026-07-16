@@ -687,7 +687,7 @@
   background: rgba(244, 67, 54, 0.1);
 }
 
-/* ---- Add Shift Form ---- */
+/* ---- Add Shift Form / General Entry Panel Fields ---- */
 .aps-add-shift {
   display: flex;
   flex-wrap: wrap;
@@ -696,22 +696,25 @@
   align-items: flex-end;
 }
 
-.aps-add-shift .field {
+.aps-entry-panel .field {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.aps-add-shift .field label {
+.aps-entry-panel .field label {
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
+  display: block;
 }
 
-.aps-add-shift .field select,
-.aps-add-shift .field input {
+.aps-entry-panel select,
+.aps-entry-panel input,
+.aps-entry-panel .field select,
+.aps-entry-panel .field input {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -720,12 +723,21 @@
   font-size: 13px;
   outline: none;
   font-family: inherit;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
 }
 
-.aps-add-shift .field select:focus,
-.aps-add-shift .field input:focus {
+.aps-entry-panel select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.aps-entry-panel select:focus,
+.aps-entry-panel input:focus,
+.aps-entry-panel .field select:focus,
+.aps-entry-panel .field input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255, 179, 0, 0.15);
 }
 
 .aps-add-shift-btn {
@@ -748,6 +760,26 @@
 
 .aps-add-shift-btn:hover {
   background: rgba(124, 77, 255, 0.25);
+}
+
+.aps-add-shift-btn.sqft-btn {
+  background: rgba(156, 39, 176, 0.15);
+  color: #BA68C8;
+  border: 1px solid rgba(156, 39, 176, 0.3);
+}
+
+.aps-add-shift-btn.sqft-btn:hover {
+  background: rgba(156, 39, 176, 0.25);
+}
+
+.aps-add-shift-btn.lifting-btn {
+  background: rgba(233, 30, 99, 0.15);
+  color: #F48FB1;
+  border: 1px solid rgba(233, 30, 99, 0.3);
+}
+
+.aps-add-shift-btn.lifting-btn:hover {
+  background: rgba(233, 30, 99, 0.25);
 }
 
 /* ---- Entry Total ---- */

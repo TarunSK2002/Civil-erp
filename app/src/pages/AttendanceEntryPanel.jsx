@@ -515,23 +515,23 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                 <div className="field" style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <div>
                     <label style={{ fontSize: 9 }}>Length (ft)</label>
-                    <input type="number" step="0.01" style={{ width: '100%', padding: '4px 8px', fontSize: 12 }} placeholder="L" value={sqFtEntry.length} onChange={e => setSqFtEntry({ ...sqFtEntry, length: e.target.value })} />
+                    <input type="number" step="0.01" placeholder="L" value={sqFtEntry.length} onChange={e => setSqFtEntry({ ...sqFtEntry, length: e.target.value })} />
                   </div>
                   <div>
                     <label style={{ fontSize: 9 }}>Breadth (ft)</label>
-                    <input type="number" step="0.01" style={{ width: '100%', padding: '4px 8px', fontSize: 12 }} placeholder="B" value={sqFtEntry.breadth} onChange={e => setSqFtEntry({ ...sqFtEntry, breadth: e.target.value })} />
+                    <input type="number" step="0.01" placeholder="B" value={sqFtEntry.breadth} onChange={e => setSqFtEntry({ ...sqFtEntry, breadth: e.target.value })} />
                   </div>
                   <div>
                     <label style={{ fontSize: 9 }}>Rate / SqFt</label>
-                    <input type="number" step="0.01" style={{ width: '100%', padding: '4px 8px', fontSize: 12 }} placeholder="₹" value={sqFtEntry.ratePerSqFt} onChange={e => setSqFtEntry({ ...sqFtEntry, ratePerSqFt: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleAddRecord()} />
+                    <input type="number" step="0.01" placeholder="₹" value={sqFtEntry.ratePerSqFt} onChange={e => setSqFtEntry({ ...sqFtEntry, ratePerSqFt: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleAddRecord()} />
                   </div>
                 </div>
 
                 <button 
-                  className="aps-add-shift-btn" 
+                  className="aps-add-shift-btn sqft-btn" 
                   onClick={handleAddRecord} 
                   disabled={saving} 
-                  style={{ gridColumn: 'span 2', width: '100%', background: '#9C27B0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
+                  style={{ gridColumn: 'span 2', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
                 >
                   <Plus size={14} /> Add Sq-Ft Work
                 </button>
@@ -582,24 +582,22 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Profit (%)</label>
+              <div className="field">
+                <label>Profit (%)</label>
                 <input 
                   type="number" 
                   placeholder="e.g. 10" 
                   value={profitPercent} 
                   onChange={e => handlePercentChange(e.target.value)}
-                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', fontWeight: 600 }} 
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Profit Value (₹) (Editable)</label>
+              <div className="field">
+                <label>Profit Value (₹) (Editable)</label>
                 <input 
                   type="number" 
                   placeholder="e.g. 300" 
                   value={profitAmount} 
                   onChange={e => setProfitAmount(e.target.value)}
-                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', fontWeight: 600 }} 
                 />
               </div>
             </div>
@@ -796,7 +794,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 8, background: 'rgba(233, 30, 99, 0.03)', padding: 12, borderRadius: 8, border: '1px dashed rgba(233, 30, 99, 0.2)', marginBottom: 12 }}>
             <div className="field">
               <label style={{ fontSize: 9 }}>Material</label>
-              <select value={newLifting.materialType} onChange={e => handleLiftingChange('materialType', e.target.value)} style={{ padding: '4px 6px', fontSize: 11 }}>
+              <select value={newLifting.materialType} onChange={e => handleLiftingChange('materialType', e.target.value)}>
                 <option value="M.Sand">M.Sand</option>
                 <option value="Jally">Jally</option>
                 <option value="Sengal">Sengal</option>
@@ -804,7 +802,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             </div>
             <div className="field">
               <label style={{ fontSize: 9 }}>Floor</label>
-              <select value={newLifting.floor} onChange={e => handleLiftingChange('floor', e.target.value)} style={{ padding: '4px 6px', fontSize: 11 }}>
+              <select value={newLifting.floor} onChange={e => handleLiftingChange('floor', e.target.value)}>
                 <option value="G.Floor">G.Floor</option>
                 <option value="1st floor">1st floor</option>
                 <option value="2nd floor">2nd floor</option>
@@ -813,18 +811,18 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             </div>
             <div className="field">
               <label style={{ fontSize: 9 }}>Qty / Pcs</label>
-              <input type="number" step="0.01" value={newLifting.quantity} onChange={e => handleLiftingChange('quantity', e.target.value)} style={{ width: '100%', padding: '4px 6px', fontSize: 11 }} />
+              <input type="number" step="0.01" value={newLifting.quantity} onChange={e => handleLiftingChange('quantity', e.target.value)} />
             </div>
             <div className="field">
               <label style={{ fontSize: 9 }}>Rate (₹)</label>
-              <input type="number" step="0.01" value={newLifting.rate} onChange={e => handleLiftingChange('rate', e.target.value)} style={{ width: '100%', padding: '4px 6px', fontSize: 11 }} onKeyDown={e => e.key === 'Enter' && handleAddLifting()} />
+              <input type="number" step="0.01" value={newLifting.rate} onChange={e => handleLiftingChange('rate', e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddLifting()} />
             </div>
 
             <button 
-              className="aps-add-shift-btn" 
+              className="aps-add-shift-btn lifting-btn" 
               onClick={handleAddLifting} 
               disabled={saving} 
-              style={{ gridColumn: 'span 4', width: '100%', background: '#E91E63', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4, height: 28, fontSize: 11, padding: 0 }}
+              style={{ gridColumn: 'span 4', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
             >
               <Plus size={12} /> Log Lifting Work
             </button>

@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, UserPlus, Trash2, Key, Users, Loader2, X } from 'lucide-react';
+import { Shield, UserPlus, Trash2, Key, Users, Loader2, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const AdminPage = () => {
   const [users, setUsers] = useState([]);
+  const { items: sortedUsers, requestSort, sortConfig } = useSortableData(users);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
   const [formData, setFormData] = useState({
     Username: '',
     Password: '',
@@ -70,19 +81,19 @@ const AdminPage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>FULL NAME</th>
-              <th style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>USERNAME</th>
-              <th style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>ROLE</th>
-              <th style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>CREATED AT</th>
+              <th onClick={() => requestSort('FullName')} style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>FULL NAME {getSortIcon('FullName')}</th>
+              <th onClick={() => requestSort('Username')} style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>USERNAME {getSortIcon('Username')}</th>
+              <th onClick={() => requestSort('Role')} style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>ROLE {getSortIcon('Role')}</th>
+              <th onClick={() => requestSort('CreatedAt')} style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>CREATED AT {getSortIcon('CreatedAt')}</th>
               <th style={{ padding: '16px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
-            ) : users.length === 0 ? (
+            ) : sortedUsers.length === 0 ? (
               <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No users found</td></tr>
-            ) : users.map(u => (
+            ) : sortedUsers.map(u => (
               <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

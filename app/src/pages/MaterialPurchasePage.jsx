@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Package, Home, Loader2, ShoppingCart, Edit2, IndianRupee, Ruler, Layers } from 'lucide-react';
+import { Plus, Trash2, Package, Home, Loader2, ShoppingCart, Edit2, IndianRupee, Ruler, Layers, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const UNITS = [
   'nos', 'unit', 'kg', 'litr', 'running feet', 'ton', 'bill',
@@ -13,6 +14,7 @@ const UNITS = [
 
 const MaterialPurchasePage = () => {
   const [purchases, setPurchases] = useState([]);
+  const { items: sortedPurchases, requestSort, sortConfig } = useSortableData(purchases);
   const [sites, setSites] = useState([]);
   const [materialTypes, setMaterialTypes] = useState([]);
   
@@ -21,6 +23,15 @@ const MaterialPurchasePage = () => {
   const [projects, setProjects] = useState([]);
   
   const [loading, setLoading] = useState(true);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
   
   // Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -261,21 +272,33 @@ const MaterialPurchasePage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>DATE</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>MATERIAL</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>DEALER</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>SITE & SCOPE</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>QUANTITY / DIMENSION</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>AMOUNT</th>
+              <th onClick={() => requestSort('PurchaseDate')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                DATE {getSortIcon('PurchaseDate')}
+              </th>
+              <th onClick={() => requestSort('Material.Name')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                MATERIAL {getSortIcon('Material.Name')}
+              </th>
+              <th onClick={() => requestSort('DealerName')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                DEALER {getSortIcon('DealerName')}
+              </th>
+              <th onClick={() => requestSort('Site.SiteName')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                SITE & SCOPE {getSortIcon('Site.SiteName')}
+              </th>
+              <th onClick={() => requestSort('Quantity')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                QUANTITY / DIMENSION {getSortIcon('Quantity')}
+              </th>
+              <th onClick={() => requestSort('Amount')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                AMOUNT {getSortIcon('Amount')}
+              </th>
               <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
-            ) : purchases.length === 0 ? (
+            ) : sortedPurchases.length === 0 ? (
               <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No purchase records found</td></tr>
-            ) : purchases.map(p => (
+            ) : sortedPurchases.map(p => (
               <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '16px', fontSize: '13px' }}>
                   {new Date(p.PurchaseDate).toLocaleDateString('en-IN')}

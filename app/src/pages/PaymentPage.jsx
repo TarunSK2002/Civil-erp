@@ -1,15 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { Edit2, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Edit2, Loader2, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 import SlidePanel from '../components/SlidePanel';
 
 const PaymentPage = () => {
   const [payments, setPayments] = useState([]);
+  const { items: sortedPayments, requestSort, sortConfig } = useSortableData(payments);
   const [sites, setSites] = useState([]);
   const [labours, setLabours] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [payees, setPayees] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   const [category, setCategory] = useState('All');
   const [fromDate, setFromDate] = useState('');
@@ -234,21 +245,21 @@ const PaymentPage = () => {
         <table style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={tableHeaderStyle}>DATE</th>
-              <th style={tableHeaderStyle}>CATEGORY</th>
-              <th style={tableHeaderStyle}>SITE NAME</th>
-              <th style={tableHeaderStyle}>PAYEE / RECIPIENT</th>
-              <th style={tableHeaderStyle}>AMOUNT</th>
-              <th style={tableHeaderStyle}>MODE</th>
+              <th onClick={() => requestSort('PaymentDate')} style={{ ...tableHeaderStyle, cursor: 'pointer', userSelect: 'none' }}>DATE {getSortIcon('PaymentDate')}</th>
+              <th onClick={() => requestSort('PaymentCategory')} style={{ ...tableHeaderStyle, cursor: 'pointer', userSelect: 'none' }}>CATEGORY {getSortIcon('PaymentCategory')}</th>
+              <th onClick={() => requestSort('Site.SiteName')} style={{ ...tableHeaderStyle, cursor: 'pointer', userSelect: 'none' }}>SITE NAME {getSortIcon('Site.SiteName')}</th>
+              <th onClick={() => requestSort('PayeeName')} style={{ ...tableHeaderStyle, cursor: 'pointer', userSelect: 'none' }}>PAYEE / RECIPIENT {getSortIcon('PayeeName')}</th>
+              <th onClick={() => requestSort('Amount')} style={{ ...tableHeaderStyle, cursor: 'pointer', userSelect: 'none' }}>AMOUNT {getSortIcon('Amount')}</th>
+              <th onClick={() => requestSort('PaymentMode')} style={{ ...tableHeaderStyle, cursor: 'pointer', userSelect: 'none' }}>MODE {getSortIcon('PaymentMode')}</th>
               <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
-            ) : payments.length === 0 ? (
+            ) : sortedPayments.length === 0 ? (
               <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No payment records found</td></tr>
-            ) : payments.map(payment => (
+            ) : sortedPayments.map(payment => (
               <tr key={payment.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '16px', fontSize: '13px' }}>
                   {new Date(payment.PaymentDate).toLocaleDateString()}

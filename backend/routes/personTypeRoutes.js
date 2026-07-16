@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
 // @route   POST /api/person-types
 // @desc    Create a new person type
 router.post('/', async (req, res) => {
-    const { Name, DailyRate } = req.body;
+    const { Name, DailyRate, RateUnit } = req.body;
     try {
         if (!Name || !Name.trim()) {
             return res.status(400).json({ msg: 'Name is required' });
@@ -38,7 +38,8 @@ router.post('/', async (req, res) => {
         const type = await PersonType.create({
             Name: Name.trim(),
             SortOrder: maxOrder + 1,
-            DailyRate: DailyRate || 0
+            DailyRate: DailyRate || 0,
+            RateUnit: RateUnit || 'Day'
         });
         res.json(type);
     } catch (err) {
@@ -50,7 +51,7 @@ router.post('/', async (req, res) => {
 // @route   PUT /api/person-types/:id
 // @desc    Update a person type (handles name renaming and rate change with retroactive recalcs)
 router.put('/:id', async (req, res) => {
-    const { Name, IsActive, SortOrder, DailyRate } = req.body;
+    const { Name, IsActive, SortOrder, DailyRate, RateUnit } = req.body;
     const t = await sequelize.transaction();
     try {
         const type = await PersonType.findByPk(req.params.id, { transaction: t });
@@ -69,6 +70,7 @@ router.put('/:id', async (req, res) => {
         if (IsActive !== undefined) updates.IsActive = IsActive;
         if (SortOrder !== undefined) updates.SortOrder = SortOrder;
         if (DailyRate !== undefined) updates.DailyRate = newRate;
+        if (RateUnit !== undefined) updates.RateUnit = RateUnit;
 
         // 1. If name changed, update existing attendance records' PersonType column
         if (oldName !== newName) {

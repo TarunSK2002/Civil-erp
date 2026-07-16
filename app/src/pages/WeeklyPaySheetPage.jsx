@@ -3,9 +3,10 @@ import {
   Plus, Table2, ChevronDown, Check, X, Loader2, Trash2,
   Calendar, CreditCard, FileSpreadsheet, Users, Building2,
   IndianRupee, Clock, CheckCircle2, AlertCircle, Package, RotateCcw,
-  Eye, EyeOff
+  Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 import './WeeklyPaySheetPage.css';
 
 const WeeklyPaySheetPage = () => {
@@ -580,6 +581,26 @@ const WeeklyPaySheetPage = () => {
     return '₹' + parseFloat(num).toLocaleString('en-IN');
   };
 
+  const filteredPayees = getFilteredPayees();
+
+  const payeesWithTotals = React.useMemo(() => {
+    return filteredPayees.map(p => ({
+      ...p,
+      TotalAmount: getRowTotal(p.id)
+    }));
+  }, [filteredPayees, sheetData?.grid, sheetData?.sites]);
+
+  const { items: sortedPayees, requestSort, sortConfig } = useSortableData(payeesWithTotals);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
+
   // ---- Render ----
   if (loading) {
     return (
@@ -590,8 +611,6 @@ const WeeklyPaySheetPage = () => {
       </div>
     );
   }
-
-  const filteredPayees = getFilteredPayees();
 
   return (
     <div className="wps-container">
@@ -805,7 +824,7 @@ const WeeklyPaySheetPage = () => {
           <table className="wps-grid">
             <thead>
               <tr>
-                <th>Payee</th>
+                <th onClick={() => requestSort('Name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Payee {getSortIcon('Name')}</th>
                 {sheetData.sites.map(site => (
                   <th key={site.id}>
                     <div className="wps-site-header">
@@ -820,11 +839,11 @@ const WeeklyPaySheetPage = () => {
                     </div>
                   </th>
                 ))}
-                <th>TOTAL</th>
+                <th onClick={() => requestSort('TotalAmount')} style={{ cursor: 'pointer', userSelect: 'none' }}>TOTAL {getSortIcon('TotalAmount')}</th>
               </tr>
             </thead>
             <tbody>
-              {filteredPayees.map(payee => (
+              {sortedPayees.map(payee => (
                 <tr key={payee.id}>
                   {/* Payee Name */}
                   <td>

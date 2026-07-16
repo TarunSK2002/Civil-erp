@@ -1,16 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, X, HardHat, Phone, CreditCard, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, HardHat, Phone, CreditCard, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const LabourPage = () => {
   const location = useLocation();
   const [labours, setLabours] = useState([]);
+  const { items: sortedLabours, requestSort, sortConfig } = useSortableData(labours);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLabour, setEditingLabour] = useState(null);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('action') === 'add') {
@@ -162,19 +173,27 @@ const LabourPage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>NAME</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>LABOUR TYPE</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>MOBILE NUMBER</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>ACCOUNT NO</th>
+              <th onClick={() => requestSort('Name')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                NAME {getSortIcon('Name')}
+              </th>
+              <th onClick={() => requestSort('LabourType')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                LABOUR TYPE {getSortIcon('LabourType')}
+              </th>
+              <th onClick={() => requestSort('MobileNo')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                MOBILE NUMBER {getSortIcon('MobileNo')}
+              </th>
+              <th onClick={() => requestSort('AccountNo')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                ACCOUNT NO {getSortIcon('AccountNo')}
+              </th>
               <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
-            ) : labours.length === 0 ? (
+            ) : sortedLabours.length === 0 ? (
               <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No labour records found</td></tr>
-            ) : labours.map(labour => (
+            ) : sortedLabours.map(labour => (
               <tr key={labour.id} style={{ borderBottom: '1px solid var(--border)', transition: 'var(--transition)' }}>
                 <td style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

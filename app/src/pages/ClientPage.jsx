@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, X, Check, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Check, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const ClientPage = () => {
   const location = useLocation();
   const [clients, setClients] = useState([]);
+  const { items: sortedClients, requestSort, sortConfig } = useSortableData(clients);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
   
   useEffect(() => {
     if (new URLSearchParams(location.search).get('action') === 'add') {
@@ -128,10 +139,18 @@ const ClientPage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>CLIENT NAME</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>MOBILE NUMBER</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>PAYMENT TYPE</th>
-              <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>CREATED AT</th>
+              <th onClick={() => requestSort('Name')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                CLIENT NAME {getSortIcon('Name')}
+              </th>
+              <th onClick={() => requestSort('MobileNumber')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                MOBILE NUMBER {getSortIcon('MobileNumber')}
+              </th>
+              <th onClick={() => requestSort('PaymentType')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                PAYMENT TYPE {getSortIcon('PaymentType')}
+              </th>
+              <th onClick={() => requestSort('CreatedAt')} style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                CREATED AT {getSortIcon('CreatedAt')}
+              </th>
               <th style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
@@ -142,11 +161,11 @@ const ClientPage = () => {
                   <Loader2 className="animate-spin" color="var(--accent)" />
                 </td>
               </tr>
-            ) : clients.length === 0 ? (
+            ) : sortedClients.length === 0 ? (
               <tr>
                 <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No clients found</td>
               </tr>
-            ) : clients.map(client => (
+            ) : sortedClients.map(client => (
               <tr key={client.id} style={{ borderBottom: '1px solid var(--border)', transition: 'var(--transition)' }}>
                 <td style={{ padding: '16px', fontWeight: '600' }}>{client.Name}</td>
                 <td style={{ padding: '16px' }}>{client.MobileNumber}</td>

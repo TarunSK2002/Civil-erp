@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 import AttendanceEntryPanel from './AttendanceEntryPanel';
 import './AttendancePaySheetPage.css';
 
@@ -257,6 +258,24 @@ const AttendancePaySheetPage = () => {
     const dateRecords = cellRecords.filter(r => r.date === entryDate);
     setShowEntryPanel({ payeeId, siteId, payeeName: payee?.Name, siteName: site?.SiteName, date: entryDate, records: dateRecords });
   };
+  const payeesWithTotals = React.useMemo(() => {
+    if (!sheetData?.payees) return [];
+    return sheetData.payees.map(payee => ({
+      ...payee,
+      TotalAttendance: getDateRowAttendance(payee.id)
+    }));
+  }, [sheetData?.payees, sheetData?.sites, entryDate, sheetData?.grid, sheetData?.liftingRecords]);
+
+  const { items: sortedPayees, requestSort, sortConfig } = useSortableData(payeesWithTotals);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   if (loading) return <div className="aps-container"><div className="aps-loading"><Loader2 size={32} className="aps-spinner" /></div></div>;
 
@@ -377,12 +396,12 @@ const AttendancePaySheetPage = () => {
         <div className="aps-grid-wrapper">
           <table className="aps-grid">
             <thead><tr>
-              <th>Labour</th>
+              <th onClick={() => requestSort('Name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Labour {getSortIcon('Name')}</th>
               {sheetData.sites.map(site => <th key={site.id}><div className="aps-site-header"><span className="aps-site-name">{site.SiteName}</span></div></th>)}
-              <th>TOTAL</th>
+              <th onClick={() => requestSort('TotalAttendance')} style={{ cursor: 'pointer', userSelect: 'none' }}>TOTAL {getSortIcon('TotalAttendance')}</th>
             </tr></thead>
             <tbody>
-              {sheetData.payees.map(payee => {
+              {sortedPayees.map(payee => {
                 const rowAttendance = getDateRowAttendance(payee.id);
 
                 return (

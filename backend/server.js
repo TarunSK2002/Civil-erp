@@ -54,6 +54,14 @@ async function startServer() {
         await sequelize.sync();
         console.log('Database synchronized.');
 
+        // Run migrations for newly added columns
+        try {
+            await sequelize.query("ALTER TABLE person_types ADD COLUMN RateUnit VARCHAR(10) NOT NULL DEFAULT 'Day';");
+            console.log('Added RateUnit column to person_types database table.');
+        } catch (err) {
+            // Column already exists or table doesn't exist yet, which is fine
+        }
+
         // Ensure master_settings table exists and is seeded with defaults
         await sequelize.query(`
             CREATE TABLE IF NOT EXISTS master_settings (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Trash2, Edit3, Loader2, UserCheck, X, Check } from 'lucide-react';
+import { Plus, Search, Trash2, Edit3, Loader2, UserCheck, X, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const PAYEE_TYPES = ['Labour', 'Contractor', 'Supplier', 'Material', 'Advance', 'Site Cash', 'Other'];
 
@@ -19,6 +20,20 @@ const PayeePage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
+
+  const filtered = payees.filter(p =>
+    p.Name.toLowerCase().includes(search.toLowerCase())
+  );
+  const { items: sortedPayees, requestSort, sortConfig } = useSortableData(filtered);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
@@ -86,10 +101,6 @@ const PayeePage = () => {
   const resetForm = () => {
     setFormData({ Name: '', Type: 'Labour', MobileNo: '', AccountNo: '', Notes: '' });
   };
-
-  const filtered = payees.filter(p =>
-    p.Name.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="data-page" style={{ padding: '24px' }}>
@@ -182,20 +193,20 @@ const PayeePage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase' }}>NAME</th>
-              <th style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase' }}>TYPE</th>
-              <th style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase' }}>MOBILE</th>
-              <th style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase' }}>ACCOUNT</th>
-              <th style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase' }}>NOTES</th>
+              <th onClick={() => requestSort('Name')} style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>NAME {getSortIcon('Name')}</th>
+              <th onClick={() => requestSort('Type')} style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>TYPE {getSortIcon('Type')}</th>
+              <th onClick={() => requestSort('MobileNo')} style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>MOBILE {getSortIcon('MobileNo')}</th>
+              <th onClick={() => requestSort('AccountNo')} style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ACCOUNT {getSortIcon('AccountNo')}</th>
+              <th onClick={() => requestSort('Notes')} style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>NOTES {getSortIcon('Notes')}</th>
               <th style={{ padding: '14px 16px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', letterSpacing: '0.8px', textTransform: 'uppercase', textAlign: 'right' }}>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}><Loader2 className="animate-spin" color="var(--accent)" /></td></tr>
-            ) : filtered.length === 0 ? (
+            ) : sortedPayees.length === 0 ? (
               <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No payees found</td></tr>
-            ) : filtered.map(payee => {
+            ) : sortedPayees.map(payee => {
               const tc = TYPE_COLORS[payee.Type] || TYPE_COLORS.Other;
               return (
                 <tr key={payee.id} style={{ borderBottom: '1px solid var(--border)' }}>

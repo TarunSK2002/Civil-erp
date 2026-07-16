@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, ChevronDown, Check, HardHat } from 'lucide-react';
+import { Search, Loader2, ChevronDown, Check, HardHat, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
+import { useSortableData } from '../hooks/useSortableData';
 
 const fmt = (num) => {
   if (!num && num !== 0) return '—';
@@ -16,6 +17,17 @@ const LabourReportView = ({ sites }) => {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
+  const { items: sortedPayments, requestSort, sortConfig } = useSortableData(reportData?.payments || []);
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={12} style={{ marginLeft: '4px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
+
   const [loading, setLoading] = useState(false);
   const [showSiteDropdown, setShowSiteDropdown] = useState(false);
   const dropdownRef = useRef(null);
@@ -195,9 +207,17 @@ const LabourReportView = ({ sites }) => {
           <div className="report-section">
             <div className="report-section-header"><h3>Payment History</h3></div>
             <table className="report-table">
-              <thead><tr><th>Date</th><th>Site</th><th style={{ textAlign: 'right' }}>Amount</th><th>Mode</th><th>Notes</th></tr></thead>
+              <thead>
+                <tr>
+                  <th onClick={() => requestSort('date')} style={{ cursor: 'pointer', userSelect: 'none' }}>Date {getSortIcon('date')}</th>
+                  <th onClick={() => requestSort('siteName')} style={{ cursor: 'pointer', userSelect: 'none' }}>Site {getSortIcon('siteName')}</th>
+                  <th onClick={() => requestSort('amount')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}>Amount {getSortIcon('amount')}</th>
+                  <th onClick={() => requestSort('mode')} style={{ cursor: 'pointer', userSelect: 'none' }}>Mode {getSortIcon('mode')}</th>
+                  <th onClick={() => requestSort('notes')} style={{ cursor: 'pointer', userSelect: 'none' }}>Notes {getSortIcon('notes')}</th>
+                </tr>
+              </thead>
               <tbody>
-                {reportData.payments.map(p => (
+                {sortedPayments.map(p => (
                   <tr key={p.id}>
                     <td>{new Date(p.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                     <td style={{ fontWeight: 500 }}>{p.siteName}</td>

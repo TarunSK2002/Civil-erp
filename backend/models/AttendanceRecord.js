@@ -67,6 +67,14 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: true
     },
+    Hours: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    RatePerHour: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true
+    },
     SectionId: {
         type: DataTypes.INTEGER,
         allowNull: true

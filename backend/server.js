@@ -62,6 +62,16 @@ async function startServer() {
             // Column already exists or table doesn't exist yet, which is fine
         }
 
+        try {
+            await sequelize.query("ALTER TABLE attendance_records ADD COLUMN Hours DECIMAL(10, 2) NULL;");
+            console.log('Added Hours column to attendance_records.');
+        } catch (err) {}
+
+        try {
+            await sequelize.query("ALTER TABLE attendance_records ADD COLUMN RatePerHour DECIMAL(18, 2) NULL;");
+            console.log('Added RatePerHour column to attendance_records.');
+        } catch (err) {}
+
         // Ensure master_settings table exists and is seeded with defaults
         await sequelize.query(`
             CREATE TABLE IF NOT EXISTS master_settings (

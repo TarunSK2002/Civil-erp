@@ -20,6 +20,24 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
     labourCount: 1
   });
 
+  const [hourEntry, setHourEntry] = useState({
+    hours: '',
+    ratePerHour: '',
+    labourCount: 1
+  });
+
+  useEffect(() => {
+    if (newShift.personType) {
+      const selectedPt = personTypes.find(pt => pt.Name === newShift.personType);
+      if (selectedPt) {
+        setHourEntry(prev => ({
+          ...prev,
+          ratePerHour: selectedPt.RateUnit === 'Hour' ? String(selectedPt.DailyRate) : ''
+        }));
+      }
+    }
+  }, [newShift.personType, personTypes]);
+
   useEffect(() => {
     if (siteId) {
       fetchSiteSections();
@@ -278,6 +296,21 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
           CalculationMode: 'Shift'
         });
         setNewShift({ personType: newShift.personType, shiftId: '', labourCount: 1 });
+      } else if (calcMode === 'Hour') {
+        if (!newShift.personType || !hourEntry.hours || !hourEntry.ratePerHour) {
+          alert('Person Type, Hours and Rate per Hour are required.');
+          setSaving(false);
+          return;
+        }
+        await api.post(`/attendance-sheets/${sheetId}/records`, {
+          PayeeId: payeeId, SiteId: siteId, AttendanceDate: date,
+          PersonType: newShift.personType,
+          CalculationMode: 'Hour',
+          Hours: parseFloat(hourEntry.hours),
+          RatePerHour: parseFloat(hourEntry.ratePerHour),
+          LabourCount: parseInt(hourEntry.labourCount || 1)
+        });
+        setHourEntry({ hours: '', ratePerHour: '', labourCount: 1 });
       } else {
         if (!newShift.personType || !sqFtEntry.sectionId || !sqFtEntry.ratePerSqFt) {
           alert('Person Type, Floor/Section and Rate per SqFt are required.');
@@ -404,6 +437,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                     <span className="shift-label" style={{ color: '#9C27B0', fontSize: '11px', fontWeight: 600 }}>
                       {floorName}: {rec.length && rec.breadth ? `${rec.length}×${rec.breadth} ft` : `${rec.sqFt || 0} SqFt`} @ ₹{rec.ratePerSqFt}
                     </span>
+                  ) : rec.calculationMode === 'Hour' ? (
+                    <span className="shift-label" style={{ color: '#FF9800', fontSize: '11px', fontWeight: 600 }}>
+                      {rec.hours} Hrs @ ₹{rec.ratePerHour}/hr
+                    </span>
                   ) : (
                     <span className="shift-label">{rec.shiftType}</span>
                   )}
@@ -440,9 +477,20 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             >
               Sq-Ft
             </button>
+            <button 
+              onClick={() => setCalcMode('Hour')}
+              style={{
+                flex: 1, padding: '4px 8px', fontSize: 11, fontWeight: 700, borderRadius: 6, cursor: 'pointer',
+                background: calcMode === 'Hour' ? '#FF9800' : 'none',
+                color: calcMode === 'Hour' ? '#0F0F1A' : 'var(--text-muted)',
+                border: 'none', transition: 'all 0.2s ease'
+              }}
+            >
+              Hour
+            </button>
           </div>
 
-          {calcMode === 'Shift' ? (
+          {calcMode === 'Shift' && (
             <>
               <div className="aps-add-shift">
                 <div className="field" style={{ flex: 2 }}>
@@ -473,7 +521,9 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                 </div>
               )}
             </>
-          ) : (
+          )}
+
+          {calcMode === 'SqFt' && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px 12px', background: 'rgba(255,255,255,0.01)', padding: 12, borderRadius: 8, border: '1px dashed var(--border)', marginBottom: 12 }}>
                 <div className="field">
@@ -514,15 +564,15 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
                 <div className="field" style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <div>
-                    <label style={{ fontSize: 9 }}>Length (ft)</label>
+                    <label style={{ fontSize: 9, marginBottom: "6px" }}>Length (ft)</label>
                     <input type="number" step="0.01" placeholder="L" value={sqFtEntry.length} onChange={e => setSqFtEntry({ ...sqFtEntry, length: e.target.value })} />
                   </div>
                   <div>
-                    <label style={{ fontSize: 9 }}>Breadth (ft)</label>
+                    <label style={{ fontSize: 9, marginBottom: "6px" }}>Breadth (ft)</label>
                     <input type="number" step="0.01" placeholder="B" value={sqFtEntry.breadth} onChange={e => setSqFtEntry({ ...sqFtEntry, breadth: e.target.value })} />
                   </div>
                   <div>
-                    <label style={{ fontSize: 9 }}>Rate / SqFt</label>
+                    <label style={{ fontSize: 9, marginBottom: "6px" }}>Rate / SqFt</label>
                     <input type="number" step="0.01" placeholder="₹" value={sqFtEntry.ratePerSqFt} onChange={e => setSqFtEntry({ ...sqFtEntry, ratePerSqFt: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleAddRecord()} />
                   </div>
                 </div>
@@ -550,6 +600,56 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                       const count = parseInt(sqFtEntry.labourCount || 1);
                       return fmt(area * rate * count);
                     })()}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+
+          {calcMode === 'Hour' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px 12px', background: 'rgba(255,255,255,0.01)', padding: 12, borderRadius: 8, border: '1px dashed var(--border)', marginBottom: 12 }}>
+                <div className="field">
+                  <label>Person Type</label>
+                  <select value={newShift.personType} onChange={e => setNewShift({ ...newShift, personType: e.target.value })}>
+                    <option value="">Select type...</option>
+                    {personTypes.map(pt => <option key={pt.id} value={pt.Name}>{pt.Name}</option>)}
+                  </select>
+                </div>
+                
+                <div className="field">
+                  <label>Count</label>
+                  <input type="number" min="1" value={hourEntry.labourCount} onChange={e => setHourEntry({ ...hourEntry, labourCount: e.target.value })} />
+                </div>
+
+                <div className="field" style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label>Hours Worked</label>
+                    <input type="number" step="0.1" placeholder="e.g. 8" value={hourEntry.hours} onChange={e => setHourEntry({ ...hourEntry, hours: e.target.value })} />
+                  </div>
+                  <div>
+                    <label>Rate / Hour (₹)</label>
+                    <input type="number" step="0.01" placeholder="₹" value={hourEntry.ratePerHour} onChange={e => setHourEntry({ ...hourEntry, ratePerHour: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleAddRecord()} />
+                  </div>
+                </div>
+
+                <button 
+                  className="aps-add-shift-btn hour-btn" 
+                  onClick={handleAddRecord} 
+                  disabled={saving} 
+                  style={{ gridColumn: 'span 2', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
+                >
+                  <Plus size={14} /> Add Hour Work
+                </button>
+              </div>
+
+              {hourEntry.hours && hourEntry.ratePerHour && (
+                <div style={{ padding: '6px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(255,152,0,0.08)', border: '1px solid rgba(255,152,0,0.15)', fontSize: 11, color: '#FFB74D', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>
+                    Estimate: {hourEntry.hours} Hrs × ₹{hourEntry.ratePerHour}/hr × {hourEntry.labourCount || 1}
+                  </span>
+                  <span style={{ fontWeight: 700 }}>
+                    {fmt(parseFloat(hourEntry.hours || 0) * parseFloat(hourEntry.ratePerHour || 0) * parseInt(hourEntry.labourCount || 1))}
                   </span>
                 </div>
               )}

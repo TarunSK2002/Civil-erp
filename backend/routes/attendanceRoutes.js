@@ -144,6 +144,8 @@ router.get('/:id', async (req, res) => {
                 breadth: rec.Breadth ? parseFloat(rec.Breadth) : null,
                 sqFt: rec.SqFt ? parseFloat(rec.SqFt) : null,
                 ratePerSqFt: rec.RatePerSqFt ? parseFloat(rec.RatePerSqFt) : null,
+                hours: rec.Hours ? parseFloat(rec.Hours) : null,
+                ratePerHour: rec.RatePerHour ? parseFloat(rec.RatePerHour) : null,
                 sectionId: rec.SectionId
             });
         });
@@ -385,7 +387,7 @@ router.delete('/:id/sites/:siteId', async (req, res) => {
 // @route   POST /api/attendance-sheets/:id/records
 // @desc    Add a shift or sqft attendance record
 router.post('/:id/records', async (req, res) => {
-    const { PayeeId, SiteId, AttendanceDate, PersonType: personTypeName, CalculationMode, ShiftType, ShiftMultiplier, LabourCount, SectionId, Length, Breadth, RatePerSqFt } = req.body;
+    const { PayeeId, SiteId, AttendanceDate, PersonType: personTypeName, CalculationMode, ShiftType, ShiftMultiplier, LabourCount, SectionId, Length, Breadth, RatePerSqFt, Hours, RatePerHour } = req.body;
     try {
         const sheet = await AttendanceSheet.findByPk(req.params.id);
         if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
@@ -403,6 +405,11 @@ router.post('/:id/records', async (req, res) => {
             const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
             rate = dailyRate * parseFloat(ShiftMultiplier || 1);
             calculatedAmount = parseInt(LabourCount || 1) * rate;
+        } else if (mode === 'Hour') {
+            const hr = parseFloat(Hours || 0);
+            const rPerHour = parseFloat(RatePerHour || 0);
+            const count = parseInt(LabourCount || 1);
+            calculatedAmount = hr * rPerHour * count;
         } else {
             // SqFt Calculation
             if (Length && Breadth) {
@@ -428,6 +435,8 @@ router.post('/:id/records', async (req, res) => {
             Breadth: mode === 'SqFt' && Breadth ? parseFloat(Breadth) : null,
             SqFt: mode === 'SqFt' ? calculatedSqFt : null,
             RatePerSqFt: mode === 'SqFt' ? parseFloat(RatePerSqFt) : null,
+            Hours: mode === 'Hour' && Hours ? parseFloat(Hours) : null,
+            RatePerHour: mode === 'Hour' ? parseFloat(RatePerHour) : null,
             SectionId: mode === 'SqFt' && SectionId ? parseInt(SectionId) : null,
             CalculatedAmount: calculatedAmount
         });
@@ -444,7 +453,7 @@ router.post('/:id/records', async (req, res) => {
 // @route   PUT /api/attendance-sheets/:id/records/:recordId
 // @desc    Update a shift or sqft attendance record
 router.put('/:id/records/:recordId', async (req, res) => {
-    const { PersonType: personTypeName, CalculationMode, ShiftType, ShiftMultiplier, LabourCount, SectionId, Length, Breadth, RatePerSqFt } = req.body;
+    const { PersonType: personTypeName, CalculationMode, ShiftType, ShiftMultiplier, LabourCount, SectionId, Length, Breadth, RatePerSqFt, Hours, RatePerHour } = req.body;
     try {
         const record = await AttendanceRecord.findByPk(req.params.recordId);
         if (!record) return res.status(404).json({ msg: 'Record not found' });
@@ -461,6 +470,11 @@ router.put('/:id/records/:recordId', async (req, res) => {
             const dailyRate = personTypeRecord ? parseFloat(personTypeRecord.DailyRate) : 0;
             rate = dailyRate * parseFloat(ShiftMultiplier !== undefined ? ShiftMultiplier : record.ShiftMultiplier);
             calculatedAmount = parseInt(LabourCount !== undefined ? LabourCount : record.LabourCount) * rate;
+        } else if (mode === 'Hour') {
+            const hr = parseFloat(Hours !== undefined ? Hours : record.Hours || 0);
+            const rPerHour = parseFloat(RatePerHour !== undefined ? RatePerHour : record.RatePerHour || 0);
+            const count = parseInt(LabourCount !== undefined ? LabourCount : record.LabourCount || 1);
+            calculatedAmount = hr * rPerHour * count;
         } else {
             const finalLength = Length !== undefined ? Length : record.Length;
             const finalBreadth = Breadth !== undefined ? Breadth : record.Breadth;
@@ -488,6 +502,19 @@ router.put('/:id/records/:recordId', async (req, res) => {
             updates.SqFt = null;
             updates.RatePerSqFt = null;
             updates.SectionId = null;
+            updates.Hours = null;
+            updates.RatePerHour = null;
+        } else if (mode === 'Hour') {
+            updates.ShiftType = null;
+            updates.ShiftMultiplier = null;
+            updates.RatePerShift = null;
+            updates.Length = null;
+            updates.Breadth = null;
+            updates.SqFt = null;
+            updates.RatePerSqFt = null;
+            updates.SectionId = null;
+            updates.Hours = Hours !== undefined && Hours !== '' ? parseFloat(Hours) : null;
+            updates.RatePerHour = RatePerHour !== undefined && RatePerHour !== '' ? parseFloat(RatePerHour) : null;
         } else {
             updates.ShiftType = null;
             updates.ShiftMultiplier = null;
@@ -497,6 +524,8 @@ router.put('/:id/records/:recordId', async (req, res) => {
             updates.SqFt = calculatedSqFt;
             updates.RatePerSqFt = RatePerSqFt !== undefined && RatePerSqFt !== '' ? parseFloat(RatePerSqFt) : null;
             updates.SectionId = SectionId !== undefined && SectionId !== '' ? parseInt(SectionId) : null;
+            updates.Hours = null;
+            updates.RatePerHour = null;
         }
 
         await record.update(updates);

@@ -11,7 +11,6 @@ process.env.DB_HOST = process.env.DB_HOST || '127.0.0.1';
 process.env.PORT = process.env.PORT || 5000;
 
 const { sequelize } = require('./models');
-const { verifyToken } = require('./middleware/auth');
 const { generalLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
@@ -46,27 +45,27 @@ app.use(generalLimiter);
 app.get('/health', (req, res) => res.json({ status: 'OK' }));
 
 app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/clients', verifyToken, require('./routes/clientRoutes'));
-app.use('/api/sites', verifyToken, require('./routes/siteRoutes'));
-app.use('/api/labours', verifyToken, require('./routes/labourRoutes'));
-app.use('/api/materials', verifyToken, require('./routes/materialRoutes'));
-app.use('/api/site-materials', verifyToken, require('./routes/siteMaterialRoutes'));
-app.use('/api/payments', verifyToken, require('./routes/paymentRoutes'));
-app.use('/api/admin', verifyToken, require('./routes/adminRoutes'));
-app.use('/api/dashboard', verifyToken, require('./routes/dashboardRoutes'));
-app.use('/api/payees', verifyToken, require('./routes/payeeRoutes'));
-app.use('/api/weekly-pay-sheets', verifyToken, require('./routes/weeklyPaySheetRoutes'));
-app.use('/api/reports', verifyToken, require('./routes/reportRoutes'));
-app.use('/api/shift-master', verifyToken, require('./routes/shiftMasterRoutes'));
-app.use('/api/attendance-sheets', verifyToken, require('./routes/attendanceRoutes'));
-app.use('/api/person-types', verifyToken, require('./routes/personTypeRoutes'));
-app.use('/api/material-types', verifyToken, require('./routes/materialTypeRoutes'));
-app.use('/api/petty-cash', verifyToken, require('./routes/pettyCashRoutes'));
-app.use('/api/personal-expenses', verifyToken, require('./routes/personalExpenseRoutes'));
-app.use('/api/master-settings', verifyToken, require('./routes/masterSettingsRoutes'));
-app.use('/api/undo', verifyToken, require('./routes/undoRoutes'));
-app.use('/api/site-sections', verifyToken, require('./routes/siteSectionRoutes'));
-app.use('/api/site-projects', verifyToken, require('./routes/siteProjectRoutes'));
+app.use('/api/clients', require('./routes/clientRoutes'));
+app.use('/api/sites', require('./routes/siteRoutes'));
+app.use('/api/labours', require('./routes/labourRoutes'));
+app.use('/api/materials', require('./routes/materialRoutes'));
+app.use('/api/site-materials', require('./routes/siteMaterialRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/dashboard', require('./routes/dashboardRoutes'));
+app.use('/api/payees', require('./routes/payeeRoutes'));
+app.use('/api/weekly-pay-sheets', require('./routes/weeklyPaySheetRoutes'));
+app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/shift-master', require('./routes/shiftMasterRoutes'));
+app.use('/api/attendance-sheets', require('./routes/attendanceRoutes'));
+app.use('/api/person-types', require('./routes/personTypeRoutes'));
+app.use('/api/material-types', require('./routes/materialTypeRoutes'));
+app.use('/api/petty-cash', require('./routes/pettyCashRoutes'));
+app.use('/api/personal-expenses', require('./routes/personalExpenseRoutes'));
+app.use('/api/master-settings', require('./routes/masterSettingsRoutes'));
+app.use('/api/undo', require('./routes/undoRoutes'));
+app.use('/api/site-sections', require('./routes/siteSectionRoutes'));
+app.use('/api/site-projects', require('./routes/siteProjectRoutes'));
 
 // Database Initialization & Server Start
 async function startServer() {

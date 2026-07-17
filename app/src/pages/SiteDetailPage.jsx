@@ -20,20 +20,6 @@ const SiteDetailPage = () => {
   const [site, setSite] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const { items: sortedRecentPayments, requestSort: sortRecentPayments, sortConfig: recentPaymentsSort } = useSortableData(site?.RecentPayments || []);
-  const { items: sortedReportPayments, requestSort: sortReportPayments, sortConfig: reportPaymentsSort } = useSortableData(paymentReport?.payments || []);
-  const { items: sortedSections, requestSort: sortSections, sortConfig: sectionsSort } = useSortableData(sections);
-  const { items: sortedProjects, requestSort: sortProjects, sortConfig: projectsSort } = useSortableData(projects);
-
-  const getSortIcon = (sortConfig, key) => {
-    if (!sortConfig || sortConfig.key !== key) {
-      return <ArrowUpDown size={12} style={{ marginLeft: '4px', opacity: 0.5, verticalAlign: 'middle' }} />;
-    }
-    return sortConfig.direction === 'ascending' 
-      ? <ArrowUp size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />
-      : <ArrowDown size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
-  };
-
   // Tabs state
   const [activeTab, setActiveTab] = useState('summary'); // 'summary' | 'sections' | 'projects'
 
@@ -73,6 +59,21 @@ const SiteDetailPage = () => {
     QuotedValue: '',
     Notes: ''
   });
+
+  // Sortable data hooks (placed below state declarations to avoid Temporal Dead Zone ReferenceError)
+  const { items: sortedRecentPayments, requestSort: sortRecentPayments, sortConfig: recentPaymentsSort } = useSortableData(site?.RecentPayments || []);
+  const { items: sortedReportPayments, requestSort: sortReportPayments, sortConfig: reportPaymentsSort } = useSortableData(paymentReport?.payments || []);
+  const { items: sortedSections, requestSort: sortSections, sortConfig: sectionsSort } = useSortableData(sections);
+  const { items: sortedProjects, requestSort: sortProjects, sortConfig: projectsSort } = useSortableData(projects);
+
+  const getSortIcon = (sortConfig, key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={12} style={{ marginLeft: '4px', opacity: 0.5, verticalAlign: 'middle' }} />;
+    }
+    return sortConfig.direction === 'ascending' 
+      ? <ArrowUp size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />
+      : <ArrowDown size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
+  };
 
   useEffect(() => {
     fetchSiteDetail();

@@ -3,70 +3,90 @@ const router = express.Router();
 const { Site, Client, Payment, SiteMaterial, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
-// @route   GET api/sites
-// @desc    Get all sites (with search and status filter)
-router.get('/', async (req, res) => {
-    const { search, status } = req.query;
-    let where = {};
-    if (status && status !== 'All') {
-        where.Status = status;
-    }
-    if (search) {
-        where[Op.or] = [
-            { SiteName: { [Op.like]: `%${search}%` } }
-        ];
+// @route   QUERY/GET api/sites
+// @desc    Get all sites with search, status filters and aggregated stats using a single optimized raw SQL query
+router.all('/', async (req, res) => {
+    if (req.method !== 'QUERY' && req.method !== 'GET') {
+        return res.status(405).send('Method Not Allowed');
     }
 
     try {
-        const sites = await Site.findAll({
-            where,
-            include: [{ model: Client, as: 'Client', attributes: ['Name'] }],
-            order: [['CreatedAt', 'DESC']]
+        // Extract parameters based on HTTP method (body for QUERY, query parameters for GET)
+        const search = req.method === 'QUERY' ? (req.body.search || '') : (req.query.search || '');
+        const status = req.method === 'QUERY' ? (req.body.status || 'All') : (req.query.status || 'All');
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // Bind parameters for raw SQL query
+        const searchLike = `%${search}%`;
+
+        const query = `
+            SELECT 
+                s.*,
+                c.Name AS ClientName,
+                (SELECT COUNT(DISTINCT p.LabourId) 
+                 FROM payments p 
+                 WHERE p.SiteId = s.Id 
+                   AND p.PaymentCategory = 'Labour' 
+                   AND p.LabourId IS NOT NULL 
+                   AND p.PaymentDate >= :thirtyDaysAgo 
+                   AND p.is_deleted = 0) AS ActiveLabourCount,
+                (SELECT COUNT(DISTINCT sm.MaterialId) 
+                 FROM site_materials sm 
+                 WHERE sm.SiteId = s.Id 
+                   AND sm.is_deleted = 0) AS MaterialItemCount,
+                COALESCE((SELECT SUM(p.Amount) 
+                          FROM payments p 
+                          WHERE p.SiteId = s.Id 
+                            AND p.PaymentCategory = 'Collection' 
+                            AND p.is_deleted = 0), 0) AS ReceivedAmount
+            FROM sites s
+            LEFT JOIN clients c ON s.ClientId = c.id
+            WHERE s.is_deleted = 0 
+              AND (:status = 'All' OR s.Status = :status)
+              AND (:search = '' OR s.SiteName LIKE :searchLike)
+            ORDER BY s.CreatedAt DESC;
+        `;
+
+        const rawSites = await sequelize.query(query, {
+            replacements: {
+                thirtyDaysAgo,
+                status,
+                search,
+                searchLike
+            },
+            type: sequelize.QueryTypes.SELECT
         });
 
-        // Calculate stats for each site
-        const sitesWithStats = await Promise.all(sites.map(async (site) => {
-            const plainSite = site.get({ plain: true });
-            
-            // Active Labours: Unique LabourIds in Payments for this site in last 30 days
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            
-            const activeLabourCount = await Payment.count({
-                distinct: true,
-                col: 'LabourId',
-                where: {
-                    SiteId: site.id,
-                    PaymentCategory: 'Labour',
-                    LabourId: { [Op.ne]: null },
-                    PaymentDate: { [Op.gte]: thirtyDaysAgo }
-                }
-            });
-
-            // Material Items: Count of unique MaterialIds in SiteMaterial for this site
-            const materialItemCount = await SiteMaterial.count({
-                distinct: true,
-                col: 'MaterialId',
-                where: { SiteId: site.id }
-            });
-
-            // Received Amount: Sum of all Collection payments for this site
-            const receivedAmount = await Payment.sum('Amount', {
-                where: { SiteId: site.id, PaymentCategory: 'Collection' }
-            }) || 0;
-
-            const siteValue = parseFloat(plainSite.SiteValue || 0);
-
+        // Map database result column names to match original ORM attributes structure
+        const sites = rawSites.map(s => {
+            const siteValue = parseFloat(s.SiteValue || 0);
+            const receivedAmount = parseFloat(s.ReceivedAmount || 0);
             return {
-                ...plainSite,
-                ActiveLabourCount: activeLabourCount,
-                MaterialItemCount: materialItemCount,
+                id: s.Id,
+                SiteName: s.SiteName,
+                ClientId: s.ClientId,
+                SiteValue: siteValue,
+                Length: s.Length,
+                Breadth: s.Breadth,
+                Facing: s.Facing,
+                Status: s.Status,
+                Progress: s.Progress,
+                NextMilestone: s.NextMilestone,
+                uuid: s.uuid,
+                is_deleted: !!s.is_deleted,
+                CreatedAt: s.CreatedAt,
+                UpdatedAt: s.UpdatedAt,
+                Client: s.ClientId ? { Name: s.ClientName || 'No Client' } : null,
+                ActiveLabourCount: parseInt(s.ActiveLabourCount || 0, 10),
+                MaterialItemCount: parseInt(s.MaterialItemCount || 0, 10),
                 ReceivedAmount: receivedAmount,
                 BalanceAmount: siteValue - receivedAmount
             };
-        }));
+        });
 
-        res.json(sitesWithStats);
+        res.json(sites);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

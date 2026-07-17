@@ -7,35 +7,56 @@ const { Op } = require('sequelize');
 // @desc    Get aggregate stats for dashboard
 router.get('/', async (req, res) => {
     try {
-        const totalClients = await Client.count();
-        const activeSites = await Site.count({ where: { Status: 'In Progress' } });
-        const completedSites = await Site.count({ where: { Status: 'Completed' } });
-        const upcomingSites = await Site.count({ where: { Status: 'Upcoming' } });
-        const totalLabours = await Labour.count();
-        const totalMaterials = await Material.count();
-        
-        const totalPayees = await Payee.count();
-        const totalPersonTypes = await PersonType.count();
-        const totalShiftTypes = await ShiftMaster.count();
-        const totalMaterialTypes = await MaterialType.count();
-        const totalPurchases = await SiteMaterial.count();
-        const totalAttendanceSheets = await AttendanceSheet.count();
-        const totalWeeklySheets = await WeeklyPaySheet.count();
-        const totalPettyCash = await PersonalExpense.count();
-
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
-        const todayPayments = await Payment.sum('Amount', {
-            where: {
-                PaymentDate: {
-                    [Op.gte]: today
-                }
-            }
-        }) || 0;
 
-        const totalSiteValues = await Site.sum('SiteValue') || 0;
-        const totalPayments = await Payment.sum('Amount') || 0;
+        const [
+            totalClients,
+            activeSites,
+            completedSites,
+            upcomingSites,
+            totalLabours,
+            totalMaterials,
+            totalPayees,
+            totalPersonTypes,
+            totalShiftTypes,
+            totalMaterialTypes,
+            totalPurchases,
+            totalAttendanceSheets,
+            totalWeeklySheets,
+            totalPettyCash,
+            todayPaymentsRaw,
+            totalSiteValuesRaw,
+            totalPaymentsRaw
+        ] = await Promise.all([
+            Client.count(),
+            Site.count({ where: { Status: 'In Progress' } }),
+            Site.count({ where: { Status: 'Completed' } }),
+            Site.count({ where: { Status: 'Upcoming' } }),
+            Labour.count(),
+            Material.count(),
+            Payee.count(),
+            PersonType.count(),
+            ShiftMaster.count(),
+            MaterialType.count(),
+            SiteMaterial.count(),
+            AttendanceSheet.count(),
+            WeeklyPaySheet.count(),
+            PersonalExpense.count(),
+            Payment.sum('Amount', {
+                where: {
+                    PaymentDate: {
+                        [Op.gte]: today
+                    }
+                }
+            }),
+            Site.sum('SiteValue'),
+            Payment.sum('Amount')
+        ]);
+
+        const todayPayments = todayPaymentsRaw || 0;
+        const totalSiteValues = totalSiteValuesRaw || 0;
+        const totalPayments = totalPaymentsRaw || 0;
         const pendingPayments = Math.max(0, totalSiteValues - totalPayments);
 
         res.json({

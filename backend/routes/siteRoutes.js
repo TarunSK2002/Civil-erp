@@ -3,17 +3,18 @@ const router = express.Router();
 const { Site, Client, Payment, SiteMaterial, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
-// @route   QUERY/GET api/sites
+// @route   QUERY/POST/GET api/sites
 // @desc    Get all sites with search, status filters and aggregated stats using a single optimized raw SQL query
 router.all('/', async (req, res) => {
-    if (req.method !== 'QUERY' && req.method !== 'GET') {
+    if (req.method !== 'QUERY' && req.method !== 'POST' && req.method !== 'GET') {
         return res.status(405).send('Method Not Allowed');
     }
 
     try {
-        // Extract parameters based on HTTP method (body for QUERY, query parameters for GET)
-        const search = req.method === 'QUERY' ? (req.body.search || '') : (req.query.search || '');
-        const status = req.method === 'QUERY' ? (req.body.status || 'All') : (req.query.status || 'All');
+        // Extract parameters based on HTTP method (body for QUERY/POST, query parameters for GET)
+        const isBodyMethod = req.method === 'QUERY' || req.method === 'POST';
+        const search = isBodyMethod ? (req.body.search || '') : (req.query.search || '');
+        const status = isBodyMethod ? (req.body.status || 'All') : (req.query.status || 'All');
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

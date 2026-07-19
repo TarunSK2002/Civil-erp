@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.3] - 2026-07-19
+
+### Fixed
+- **Auth Storage**: Changed login credentials storage from `localStorage` to `sessionStorage` to ensure user sessions automatically clear when the application is closed.
+- **Profile Letter Display**: Fixed an issue in `TopBar` where the profile initial and user details (username and role) were not showing correctly due to nested login response structure.
+
 ## [2.4.0] - 2026-06-17
 
 ### Added

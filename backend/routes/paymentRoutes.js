@@ -20,6 +20,11 @@ router.get('/', async (req, res) => {
     }
 
     try {
+        // --- DEBUG: run raw query to verify DB connectivity and data ---
+        const { sequelize } = require('../models');
+        const [rawRows] = await sequelize.query('SELECT Id, PaymentCategory, Amount FROM payments LIMIT 10');
+        console.log('[payments debug] raw SQL rows:', JSON.stringify(rawRows));
+
         const payments = await Payment.findAll({
             where,
             include: [
@@ -35,10 +40,11 @@ router.get('/', async (req, res) => {
             ],
             order: [['PaymentDate', 'DESC']]
         });
+        console.log('[payments debug] Payment.findAll() count:', payments.length);
         res.json(payments);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error('[payments error]', err.message);
+        res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
 

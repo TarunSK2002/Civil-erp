@@ -3,6 +3,30 @@ const router = express.Router();
 const { Payment, Site, Labour, Material, Payee, WeeklyPaySheetItem } = require('../models');
 const { Op } = require('sequelize');
 
+// @route   GET api/payments/debug
+// @desc    Temporary diagnostic — shows raw DB rows, Sequelize scope, and any errors
+router.get('/debug', async (req, res) => {
+    try {
+        const { sequelize } = require('../models');
+        const [rawRows] = await sequelize.query('SELECT Id, PaymentCategory, Amount, is_deleted FROM payments LIMIT 20');
+        const [countRows] = await sequelize.query('SELECT COUNT(*) as total FROM payments');
+        const [isDelCount] = await sequelize.query('SELECT is_deleted, COUNT(*) as cnt FROM payments GROUP BY is_deleted');
+        const scoped = await Payment.findAll({ limit: 5 });
+        const unscoped = await Payment.unscoped().findAll({ limit: 5 });
+        res.json({
+            rawRows,
+            totalCount: countRows[0],
+            isDeletedGroups: isDelCount,
+            scopedCount: scoped.length,
+            unscopedCount: unscoped.length,
+            paymentModelScope: Payment.options?.defaultScope || 'none'
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 // @route   GET api/payments
 // @desc    Get all payments (with filters)
 router.get('/', async (req, res) => {

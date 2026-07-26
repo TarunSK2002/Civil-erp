@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
         const amountField = isSqlite ? 'amount' : 'Amount';
 
         const sheets = await AttendanceSheet.findAll({
-            order: [['WeekStartDate', 'DESC']],
+            order: [['WeekStartDate', 'DESC'], ['id', 'DESC']],
             attributes: [
                 'id', 'Title', 'WeekStartDate', 'WeekEndDate', 'Status', 'CreatedAt', 'SelectedPayeeIds', 'SelectedSiteIds',
                 [

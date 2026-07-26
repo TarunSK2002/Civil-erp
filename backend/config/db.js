@@ -24,7 +24,7 @@ const sequelize = new Sequelize(
 sequelize.addHook('beforeDefine', (attributes, options) => {
     const modelName = options.modelName || options.name.singular;
     // Exclude system/special tables
-    if (modelName === 'User' || modelName === 'ActionLog' || modelName === 'LiftingChargeRate') {
+    if (modelName === 'User' || modelName === 'ActionLog' || modelName === 'LiftingChargeRate' || modelName === 'Payment') {
         return;
     }
 

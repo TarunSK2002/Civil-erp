@@ -39,11 +39,6 @@ const SiteMaterial = sequelize.define('SiteMaterial', {
         allowNull: true,
         defaultValue: ''
     },
-    BillNo: {
-        type: DataTypes.STRING(50),
-        allowNull: true,
-        defaultValue: ''
-    },
     Length: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true

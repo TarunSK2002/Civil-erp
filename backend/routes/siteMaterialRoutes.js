@@ -77,7 +77,7 @@ router.get('/', async (req, res) => {
 // @desc    Add a material purchase for a site
 router.post('/', async (req, res) => {
     const { 
-        SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, Discount, DealerName,
+        SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, Discount, DealerName, BillNo,
         Length, Breadth, WastagePercent, RatePerUnit, CalculationMode, SectionId, ProjectId
     } = req.body;
 
@@ -93,6 +93,7 @@ router.post('/', async (req, res) => {
             Amount: calc.Amount,
             Discount: Discount || 0,
             DealerName: DealerName || '',
+            BillNo: BillNo || '',
             PurchaseDate: PurchaseDate || new Date(),
             Length: Length !== undefined ? parseFloat(Length) : null,
             Breadth: Breadth !== undefined ? parseFloat(Breadth) : null,
@@ -120,7 +121,7 @@ router.post('/', async (req, res) => {
 // @desc    Update a material purchase record
 router.put('/:id', async (req, res) => {
     const { 
-        SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, Discount, DealerName,
+        SiteId, MaterialId, Quantity, Unit, PurchaseDate, Amount, Discount, DealerName, BillNo,
         Length, Breadth, WastagePercent, RatePerUnit, CalculationMode, SectionId, ProjectId
     } = req.body;
 
@@ -139,6 +140,7 @@ router.put('/:id', async (req, res) => {
             Amount: calc.Amount,
             Discount: Discount !== undefined ? parseFloat(Discount) : parseFloat(record.Discount || 0),
             DealerName: DealerName || '',
+            BillNo: BillNo || '',
             PurchaseDate: PurchaseDate || new Date(),
             Length: Length !== undefined ? parseFloat(Length) : null,
             Breadth: Breadth !== undefined ? parseFloat(Breadth) : null,

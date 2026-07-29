@@ -98,6 +98,11 @@ async function startServer() {
             console.log('Added RatePerHour column to attendance_records.');
         } catch (err) {}
 
+        try {
+            await sequelize.query("ALTER TABLE site_materials ADD COLUMN BillNo VARCHAR(50) NULL DEFAULT '';");
+            console.log('Added BillNo column to site_materials table.');
+        } catch (err) {}
+
         // Ensure master_settings table exists and is seeded with defaults
         await sequelize.query(`
             CREATE TABLE IF NOT EXISTS master_settings (

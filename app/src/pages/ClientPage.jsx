@@ -3,8 +3,10 @@ import { useLocation } from 'react-router-dom';
 import { Plus, Search, Edit2, Trash2, X, Check, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import api from '../api/axios';
 import { useSortableData } from '../hooks/useSortableData';
+import { useAuth } from '../context/AuthContext';
 
 const ClientPage = () => {
+  const { user } = useAuth();
   const location = useLocation();
   const [clients, setClients] = useState([]);
   const { items: sortedClients, requestSort, sortConfig } = useSortableData(clients);
@@ -185,20 +187,24 @@ const ClientPage = () => {
                   {new Date(client.CreatedAt).toLocaleDateString()}
                 </td>
                 <td style={{ padding: '16px', textAlign: 'right' }}>
-                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                    <button 
-                      onClick={() => openEditModal(client)}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', padding: '6px' }}
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(client.id)}
-                      style={{ background: 'none', border: 'none', color: 'var(--error)', padding: '6px' }}
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                  {user?.role === 'ADMIN' ? (
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <button 
+                        onClick={() => openEditModal(client)}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', padding: '6px' }}
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(client.id)}
+                        style={{ background: 'none', border: 'none', color: 'var(--error)', padding: '6px' }}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Read Only</span>
+                  )}
                 </td>
               </tr>
             ))}

@@ -23,7 +23,10 @@ import { useNavigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import api from '../api/axios';
 
+import { useAuth } from '../context/AuthContext';
+
 const DashboardPage = () => {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -71,9 +74,9 @@ const DashboardPage = () => {
     { title: 'Material Types', count: stats.totalMaterialTypes, path: '/materials', icon: Settings, color: '#3b82f6', desc: 'Material category units & rates' },
     { title: 'Material Purchases', count: stats.totalPurchases, path: '/materials/purchase', icon: ShoppingCart, color: '#10b981', desc: 'Log material procurement records' },
     { title: 'Attendance Pay Sheets', count: stats.totalAttendanceSheets, path: '/attendance-pay-sheet', icon: ClipboardList, color: '#f43f5e', desc: 'Manage daily attendance sheets' },
-    { title: 'Weekly Pay Sheets', count: stats.totalWeeklySheets, path: '/weekly-pay-sheet', icon: FileSpreadsheet, color: '#8b5cf6', desc: 'Weekly wages & billing summaries' },
-    { title: 'Petty Cash', count: stats.totalPettyCash, path: '/personal-expenses', icon: Wallet, color: '#14b8a6', desc: 'Record personal and office expenses' },
-  ];
+    { title: 'Weekly Pay Sheets', count: stats.totalWeeklySheets, path: '/weekly-pay-sheet', icon: FileSpreadsheet, color: '#8b5cf6', desc: 'Weekly wages & billing summaries', adminOnly: true },
+    { title: 'Petty Cash', count: stats.totalPettyCash, path: '/personal-expenses', icon: Wallet, color: '#14b8a6', desc: 'Record personal and office expenses', adminOnly: true },
+  ].filter(card => !card.adminOnly || user?.role === 'ADMIN');
 
   return (
     <div style={{ padding: '24px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
@@ -117,18 +120,22 @@ const DashboardPage = () => {
           icon={Home} 
           color="#1B5E20" 
         />
-        <StatCard 
-          title="Today's Payments" 
-          value={`₹${stats.todayPayments.toLocaleString('en-IN')}`} 
-          icon={CreditCard} 
-          color="#E65100" 
-        />
-        <StatCard 
-          title="Pending Payments" 
-          value={`₹${stats.pendingPayments.toLocaleString('en-IN')}`} 
-          icon={AlertCircle} 
-          color="#B71C1C" 
-        />
+        {user?.role === 'ADMIN' && (
+          <>
+            <StatCard 
+              title="Today's Payments" 
+              value={`₹${stats.todayPayments.toLocaleString('en-IN')}`} 
+              icon={CreditCard} 
+              color="#E65100" 
+            />
+            <StatCard 
+              title="Pending Payments" 
+              value={`₹${stats.pendingPayments.toLocaleString('en-IN')}`} 
+              icon={AlertCircle} 
+              color="#B71C1C" 
+            />
+          </>
+        )}
       </div>
 
       {/* Second Row Grid */}

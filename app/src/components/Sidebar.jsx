@@ -119,14 +119,22 @@ const Sidebar = ({ expanded }) => {
         <SidebarItem to="/materials/purchase" icon={ShoppingCart} label="Purchase" expanded={expanded} />
         <SidebarItem to="/labour" icon={HardHat} label="Labour" expanded={expanded} />
         <SidebarItem to="/materials" icon={Package} label="Dealers" expanded={expanded} />
-        <SidebarItem to="/payments" icon={CreditCard} label="Payments" expanded={expanded} />
-        <SidebarItem to="/reports" icon={BarChart3} label="Reports" expanded={expanded} />
+        {user?.role === 'ADMIN' && (
+          <SidebarItem to="/payments" icon={CreditCard} label="Payments" expanded={expanded} />
+        )}
+        {user?.role === 'ADMIN' && (
+          <SidebarItem to="/reports" icon={BarChart3} label="Reports" expanded={expanded} />
+        )}
         
         <div style={{ margin: '20px 0 10px', height: '1px', backgroundColor: 'var(--border)', opacity: 0.5, marginInline: '20px' }} />
 
         <SidebarItem to="/payees" icon={UserCheck} label="Payees" expanded={expanded} />
-        <SidebarItem to="/weekly-pay-sheet" icon={Table2} label="Weekly Pay Sheet" expanded={expanded} />
-        <SidebarItem to="/personal-expenses" icon={Wallet} label="Petty Cash" expanded={expanded} />
+        {user?.role === 'ADMIN' && (
+          <SidebarItem to="/weekly-pay-sheet" icon={Table2} label="Weekly Pay Sheet" expanded={expanded} />
+        )}
+        {user?.role === 'ADMIN' && (
+          <SidebarItem to="/personal-expenses" icon={Wallet} label="Petty Cash" expanded={expanded} />
+        )}
         <SidebarItem to="/attendance-pay-sheet" icon={ClipboardCheck} label="Attendance Sheet" expanded={expanded} />
         <SidebarItem to="/shift-master" icon={Settings2} label="Shift Master" expanded={expanded} />
         <SidebarItem to="/person-type-master" icon={Users} label="Person Types" expanded={expanded} />

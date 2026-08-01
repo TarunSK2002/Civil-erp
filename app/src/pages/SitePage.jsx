@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit2, Trash2, Home, Users, Ruler, MapPin, Loader2, Eye, IndianRupee, CheckCircle2, Clock } from 'lucide-react';
 import api from '../api/axios';
 import SlidePanel from '../components/SlidePanel';
+import { useAuth } from '../context/AuthContext';
 
 const SitePage = () => {
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sites, setSites] = useState([]);
@@ -136,16 +138,18 @@ const SitePage = () => {
           <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Manage construction sites, measurements, and budgets.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{
-            backgroundColor: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
-            padding: '10px 16px',
-            minWidth: '220px'
-          }}>
-            <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Site Value</p>
-            <p style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: '900', color: 'var(--accent)' }}>Rs {totalSiteValue.toLocaleString('en-IN')}</p>
-          </div>
+          {user?.role === 'ADMIN' && (
+            <div style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '10px 16px',
+              minWidth: '220px'
+            }}>
+              <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Site Value</p>
+              <p style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: '900', color: 'var(--accent)' }}>Rs {totalSiteValue.toLocaleString('en-IN')}</p>
+            </div>
+          )}
           <button 
             onClick={() => { setEditingSite(null); resetForm(); setIsModalOpen(true); }}
             style={{ 
@@ -269,29 +273,33 @@ const SitePage = () => {
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: 'var(--bg-primary)', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>ESTIMATED BUDGET</p>
-                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--accent)' }}>₹{parseFloat(site.SiteValue || 0).toLocaleString('en-IN')}</p>
-                </div>
+                {user?.role === 'ADMIN' && (
+                  <>
+                    <div style={{ backgroundColor: 'var(--bg-primary)', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
+                      <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>ESTIMATED BUDGET</p>
+                      <p style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--accent)' }}>₹{parseFloat(site.SiteValue || 0).toLocaleString('en-IN')}</p>
+                    </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '20px' }}>
-                  <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '8px' }}>
-                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckCircle2 size={10} /> RECEIVED
-                    </p>
-                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--success)' }}>
-                      ₹{parseFloat(site.ReceivedAmount || 0).toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                  <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '8px' }}>
-                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={10} /> BALANCE
-                    </p>
-                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: parseFloat(site.BalanceAmount || 0) > 0 ? 'var(--error)' : 'var(--success)' }}>
-                      ₹{parseFloat(site.BalanceAmount || 0).toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '20px' }}>
+                      <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '8px' }}>
+                        <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircle2 size={10} /> RECEIVED
+                        </p>
+                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--success)' }}>
+                          ₹{parseFloat(site.ReceivedAmount || 0).toLocaleString('en-IN')}
+                        </p>
+                      </div>
+                      <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px', borderRadius: '8px' }}>
+                        <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={10} /> BALANCE
+                        </p>
+                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: parseFloat(site.BalanceAmount || 0) > 0 ? 'var(--error)' : 'var(--success)' }}>
+                          ₹{parseFloat(site.BalanceAmount || 0).toLocaleString('en-IN')}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
                   <button 
@@ -398,15 +406,17 @@ const SitePage = () => {
                 placeholder="e.g. North"
               />
             </div>
-            <div className="sp-field">
-              <label>Site Value (₹)</label>
-              <input 
-                type="number" 
-                value={formData.SiteValue}
-                onChange={(e) => setFormData({...formData, SiteValue: e.target.value})}
-                required
-              />
-            </div>
+            {user?.role === 'ADMIN' && (
+              <div className="sp-field">
+                <label>Site Value (₹)</label>
+                <input 
+                  type="number" 
+                  value={formData.SiteValue}
+                  onChange={(e) => setFormData({...formData, SiteValue: e.target.value})}
+                  required
+                />
+              </div>
+            )}
           </div>
           <div className="sp-row">
             <div className="sp-field">

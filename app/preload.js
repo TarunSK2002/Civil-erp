@@ -1,5 +1,7 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
+const pkg = require('./package.json');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    // No sync APIs needed — online-only mode
+    appVersion: pkg.version,
+    getAppVersion: () => pkg.version,
 });

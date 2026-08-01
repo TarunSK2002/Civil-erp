@@ -66,9 +66,9 @@ const AttendancePaySheetPage = () => {
     try { const res = await api.get(`/attendance-sheets/${id}`); setSheetData(res.data); }
     catch (err) { console.error(err); } finally { setGridLoading(false); }
   };
-  const fetchAllPayees = async () => { try { const r = await api.get('/payees'); setAllPayees(r.data); } catch(e) { console.error(e); } };
-  const fetchAllSites = async () => { try { const r = await api.get('/sites'); setAllSites(r.data); } catch(e) { console.error(e); } };
-  const fetchShiftTypes = async () => { try { const r = await api.get('/shift-master'); setShiftTypes(r.data); } catch(e) { console.error(e); } };
+  const fetchAllPayees = async () => { try { const r = await api.get('/payees'); setAllPayees(r.data); } catch (e) { console.error(e); } };
+  const fetchAllSites = async () => { try { const r = await api.get('/sites'); setAllSites(r.data); } catch (e) { console.error(e); } };
+  const fetchShiftTypes = async () => { try { const r = await api.get('/shift-master'); setShiftTypes(r.data); } catch (e) { console.error(e); } };
   const fetchMasterSettings = async () => {
     try {
       const r = await api.get('/master-settings');
@@ -84,7 +84,7 @@ const AttendancePaySheetPage = () => {
         LatestAppVersion: r.data.LatestAppVersion || '2.5.0',
         UpdateLink: r.data.UpdateLink || 'https://drive.google.com'
       });
-    } catch(e) {
+    } catch (e) {
       console.error(e);
     }
   };
@@ -100,7 +100,7 @@ const AttendancePaySheetPage = () => {
       ]);
       setMasterSettings({ ...editingMaster });
       setShowMasterSettings(false);
-    } catch(e) {
+    } catch (e) {
       alert('Failed to save settings');
     } finally {
       setSavingMaster(false);
@@ -154,7 +154,7 @@ const AttendancePaySheetPage = () => {
     try {
       const res = await api.post('/attendance-sheets', newSheetForm);
       setShowNewSheetModal(false);
-      setNewSheetForm({ Title: '', WeekStartDate: new Date().toISOString().split('T')[0], WeekEndDate: (() => { const d = new Date(); d.setDate(d.getDate()+6); return d.toISOString().split('T')[0]; })() });
+      setNewSheetForm({ Title: '', WeekStartDate: new Date().toISOString().split('T')[0], WeekEndDate: (() => { const d = new Date(); d.setDate(d.getDate() + 6); return d.toISOString().split('T')[0]; })() });
       await fetchSheets(); setSelectedSheetId(res.data.id);
     } catch (err) { alert(err.response?.data?.msg || 'Failed'); }
   };
@@ -272,7 +272,7 @@ const AttendancePaySheetPage = () => {
     if (!sortConfig || sortConfig.key !== key) {
       return <ArrowUpDown size={14} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />;
     }
-    return sortConfig.direction === 'ascending' 
+    return sortConfig.direction === 'ascending'
       ? <ArrowUp size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />
       : <ArrowDown size={14} style={{ marginLeft: '6px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
   };
@@ -289,7 +289,7 @@ const AttendancePaySheetPage = () => {
           <button
             className="aps-btn aps-btn-secondary"
             onClick={() => { fetchLiftingRates(); setShowLiftingRatesModal(true); }}
-            style={{ background: 'rgba(233,30,99,0.1)', color: '#E91E63', border: '1px solid rgba(233,30,99,0.3)', marginRight: '8px' }}
+            style={{ background: 'rgba(233,30,99,0.1)', color: '#bd1ee9ff', border: '1px solid rgba(233,30,99,0.3)', marginRight: '8px' }}
           >
             <IndianRupee size={16} /> Lifting Rates
           </button>
@@ -321,14 +321,14 @@ const AttendancePaySheetPage = () => {
       {sheetData && showSummary && (
         <div className="aps-summary">
           <div className="aps-summary-card total"><div className="aps-summary-label">Date Attendance</div><div className="aps-summary-value">{fmt(totalAttendanceOnly)}</div></div>
-          <div className="aps-summary-card misc"><div className="aps-summary-label">Misc Charges</div><div className="aps-summary-value" style={{color:'#00BCD4'}}>{fmt(getTotalMisc())}</div></div>
-          <div className="aps-summary-card info"><div className="aps-summary-label">Sites × Labour</div><div className="aps-summary-value">{sheetData.sites?.length||0} × {sheetData.payees?.length||0}</div></div>
+          <div className="aps-summary-card misc"><div className="aps-summary-label">Misc Charges</div><div className="aps-summary-value" style={{ color: '#00BCD4' }}>{fmt(getTotalMisc())}</div></div>
+          <div className="aps-summary-card info"><div className="aps-summary-label">Sites × Labour</div><div className="aps-summary-value">{sheetData.sites?.length || 0} × {sheetData.payees?.length || 0}</div></div>
         </div>
       )}
 
       <div className="aps-sheet-bar">
         <FileSpreadsheet size={18} color="var(--accent)" />
-        <select className="aps-sheet-select" value={selectedSheetId||''} onChange={e => setSelectedSheetId(e.target.value ? parseInt(e.target.value) : null)}>
+        <select className="aps-sheet-select" value={selectedSheetId || ''} onChange={e => setSelectedSheetId(e.target.value ? parseInt(e.target.value) : null)}>
           <option value="">— Select Sheet —</option>
           {sheets.map(s => <option key={s.id} value={s.id}>{s.Title} ({new Date(s.WeekStartDate).toLocaleDateString('en-IN')} - {new Date(s.WeekEndDate).toLocaleDateString('en-IN')})</option>)}
         </select>
@@ -454,14 +454,14 @@ const AttendancePaySheetPage = () => {
             <h2>Create Attendance Sheet</h2>
             <div className="aps-modal-field"><label>Title</label>
               <input ref={newSheetTitleRef} type="text" placeholder="e.g. Week 12.05.2026" value={newSheetForm.Title}
-                onChange={e => setNewSheetForm({...newSheetForm, Title: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleCreateSheet()} />
+                onChange={e => setNewSheetForm({ ...newSheetForm, Title: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleCreateSheet()} />
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <div className="aps-modal-field" style={{ flex: 1 }}><label>Week Start</label>
-                <input type="date" value={newSheetForm.WeekStartDate} onChange={e => setNewSheetForm({...newSheetForm, WeekStartDate: e.target.value})} />
+                <input type="date" value={newSheetForm.WeekStartDate} onChange={e => setNewSheetForm({ ...newSheetForm, WeekStartDate: e.target.value })} />
               </div>
               <div className="aps-modal-field" style={{ flex: 1 }}><label>Week End</label>
-                <input type="date" value={newSheetForm.WeekEndDate} onChange={e => setNewSheetForm({...newSheetForm, WeekEndDate: e.target.value})} />
+                <input type="date" value={newSheetForm.WeekEndDate} onChange={e => setNewSheetForm({ ...newSheetForm, WeekEndDate: e.target.value })} />
               </div>
             </div>
             <div className="aps-modal-actions">
@@ -535,7 +535,7 @@ const AttendancePaySheetPage = () => {
         <div className="aps-modal-overlay" onClick={() => setShowMasterSettings(false)}>
           <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', margin: 'auto', maxWidth: 420 }}>
             <h2>Master Settings</h2>
-            
+
             <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginTop: 12, marginBottom: 12 }}>Expenses Settings</h3>
             <div className="aps-modal-field">
               <label>Tea Expense per Labour (₹/day)</label>
@@ -556,7 +556,7 @@ const AttendancePaySheetPage = () => {
               />
             </div>
             <div style={{ background: 'rgba(255,152,0,0.08)', border: '1px solid rgba(255,152,0,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#FF9800', marginBottom: 16 }}>
-              Total per worker per day: ₹{(parseFloat(editingMaster.TeaExpense)||0) + (parseFloat(editingMaster.BusExpense)||0)}
+              Total per worker per day: ₹{(parseFloat(editingMaster.TeaExpense) || 0) + (parseFloat(editingMaster.BusExpense) || 0)}
             </div>
 
             <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginTop: 16, marginBottom: 12, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>App Updates</h3>
@@ -601,11 +601,12 @@ const AttendancePaySheetPage = () => {
               weeklySiteAttendance={(sheetData?.grid?.[`${showEntryPanel.payeeId}_${showEntryPanel.siteId}`]?.records || []).reduce((sum, r) => sum + parseFloat(r.calculatedAmount || 0), 0)}
               weeklySiteLabourCount={getWeeklySiteLabourCount(showEntryPanel.payeeId, showEntryPanel.siteId)}
               onClose={() => setShowEntryPanel(null)}
-              onSaved={() => { fetchSheetData(selectedSheetId); const key = `${showEntryPanel.payeeId}_${showEntryPanel.siteId}`;
+              onSaved={() => {
+                fetchSheetData(selectedSheetId); const key = `${showEntryPanel.payeeId}_${showEntryPanel.siteId}`;
                 api.get(`/attendance-sheets/${selectedSheetId}`).then(res => {
                   setSheetData(res.data);
                   const recs = (res.data.grid?.[key]?.records || []).filter(r => r.date === showEntryPanel.date);
-                  setShowEntryPanel(prev => ({...prev, records: recs}));
+                  setShowEntryPanel(prev => ({ ...prev, records: recs }));
                 });
               }}
             />

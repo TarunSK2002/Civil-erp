@@ -9,7 +9,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
   const [personTypes, setPersonTypes] = useState([]);
   const [newShift, setNewShift] = useState({ personType: '', shiftId: '', labourCount: 1 });
   const [newMisc, setNewMisc] = useState({ name: '', amount: '' });
-  
+
   const [calcMode, setCalcMode] = useState('Shift'); // 'Shift' or 'SqFt'
   const [siteSections, setSiteSections] = useState([]);
   const [sqFtEntry, setSqFtEntry] = useState({
@@ -64,8 +64,8 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
   useEffect(() => {
     if (liftingRates.length > 0) {
-      const matchedRate = liftingRates.find(r => 
-        r.MaterialType === newLifting.materialType && 
+      const matchedRate = liftingRates.find(r =>
+        r.MaterialType === newLifting.materialType &&
         r.Floor === newLifting.floor
       );
       setNewLifting(prev => ({
@@ -87,9 +87,9 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
   const fetchLiftingRecords = async () => {
     try {
       const res = await api.get(`/attendance-sheets/${sheetId}/lifting-records`);
-      const filtered = res.data.filter(r => 
-        r.PayeeId === payeeId && 
-        r.SiteId === siteId && 
+      const filtered = res.data.filter(r =>
+        r.PayeeId === payeeId &&
+        r.SiteId === siteId &&
         r.LiftingDate === date
       );
       setLocalLiftingRecords(filtered);
@@ -102,8 +102,8 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
     setNewLifting(prev => {
       const updated = { ...prev, [field]: val };
       if (field === 'materialType' || field === 'floor') {
-        const matchedRate = liftingRates.find(r => 
-          r.MaterialType === updated.materialType && 
+        const matchedRate = liftingRates.find(r =>
+          r.MaterialType === updated.materialType &&
           r.Floor === updated.floor
         );
         updated.rate = matchedRate ? String(matchedRate.Rate) : '';
@@ -128,15 +128,15 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
         Rate: parseFloat(newLifting.rate),
         LiftingDate: date
       });
-      const defaultMatchedRate = liftingRates.find(r => 
-        r.MaterialType === newLifting.materialType && 
+      const defaultMatchedRate = liftingRates.find(r =>
+        r.MaterialType === newLifting.materialType &&
         r.Floor === newLifting.floor
       );
-      setNewLifting({ 
-        materialType: newLifting.materialType, 
-        floor: newLifting.floor, 
-        quantity: '1', 
-        rate: defaultMatchedRate ? String(defaultMatchedRate.Rate) : '' 
+      setNewLifting({
+        materialType: newLifting.materialType,
+        floor: newLifting.floor,
+        quantity: '1',
+        rate: defaultMatchedRate ? String(defaultMatchedRate.Rate) : ''
       });
       await fetchLiftingRecords();
       onSaved();
@@ -218,7 +218,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
         MiscName: name,
         Amount: amt
       });
-      
+
       fetchMisc();
       onSaved();
     } catch (err) {
@@ -275,7 +275,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
   const selectedShift = shiftTypes.find(s => String(s.id) === String(newShift.shiftId));
   const selectedPersonType = personTypes.find(pt => pt.Name === newShift.personType);
-  
+
   let baseRate = 0;
   if (selectedPersonType) {
     baseRate = parseFloat(selectedPersonType.DailyRate || 0);
@@ -401,28 +401,28 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
-        <button 
+        <button
           onClick={() => setActiveTab('attendance')}
-          style={{ 
+          style={{
             padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'none', border: 'none', borderBottom: activeTab === 'attendance' ? '2px solid var(--accent)' : '2px solid transparent',
             color: activeTab === 'attendance' ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
           }}
         >
           <Clock size={14} /> Attendance
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('misc')}
-          style={{ 
+          style={{
             padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'none', border: 'none', borderBottom: activeTab === 'misc' ? '2px solid #00BCD4' : '2px solid transparent',
             color: activeTab === 'misc' ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
           }}
         >
           <IndianRupee size={14} /> Misc Charges
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('lifting')}
-          style={{ 
-            padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'none', border: 'none', borderBottom: activeTab === 'lifting' ? '2px solid #E91E63' : '2px solid transparent',
+          style={{
+            padding: '8px 16px', fontSize: 12, fontWeight: 600, background: 'none', border: 'none', borderBottom: activeTab === 'lifting' ? '2px solid #bd1ee9ff' : '2px solid transparent',
             color: activeTab === 'lifting' ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
           }}
         >
@@ -464,7 +464,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
           {/* Mode Switcher */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 14, background: 'rgba(255,255,255,0.02)', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', textTransform: 'uppercase', letterSpacing: 0.5 }}>Mode:</span>
-            <button 
+            <button
               onClick={() => setCalcMode('Shift')}
               style={{
                 flex: 1, padding: '4px 8px', fontSize: 11, fontWeight: 700, borderRadius: 6, cursor: 'pointer',
@@ -475,7 +475,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             >
               Shift
             </button>
-            <button 
+            <button
               onClick={() => setCalcMode('SqFt')}
               style={{
                 flex: 1, padding: '4px 8px', fontSize: 11, fontWeight: 700, borderRadius: 6, cursor: 'pointer',
@@ -486,7 +486,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             >
               Sq-Ft
             </button>
-            <button 
+            <button
               onClick={() => setCalcMode('Hour')}
               style={{
                 flex: 1, padding: '4px 8px', fontSize: 11, fontWeight: 700, borderRadius: 6, cursor: 'pointer',
@@ -542,7 +542,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                     {personTypes.map(pt => <option key={pt.id} value={pt.Name}>{pt.Name}</option>)}
                   </select>
                 </div>
-                
+
                 <div className="field">
                   <label>Count</label>
                   <input type="number" min="1" value={sqFtEntry.labourCount} onChange={e => setSqFtEntry({ ...sqFtEntry, labourCount: e.target.value })} />
@@ -550,15 +550,15 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
                 <div className="field" style={{ gridColumn: 'span 2' }}>
                   <label>Floor / Section (Option C)</label>
-                  <select 
-                    value={sqFtEntry.sectionId} 
+                  <select
+                    value={sqFtEntry.sectionId}
                     onChange={e => {
                       const secId = e.target.value;
                       const sec = siteSections.find(s => String(s.id) === String(secId));
-                      setSqFtEntry({ 
-                        ...sqFtEntry, 
-                        sectionId: secId, 
-                        ratePerSqFt: sec && sec.RatePerSqFt ? String(sec.RatePerSqFt) : '' 
+                      setSqFtEntry({
+                        ...sqFtEntry,
+                        sectionId: secId,
+                        ratePerSqFt: sec && sec.RatePerSqFt ? String(sec.RatePerSqFt) : ''
                       });
                     }}
                   >
@@ -586,10 +586,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                   </div>
                 </div>
 
-                <button 
-                  className="aps-add-shift-btn sqft-btn" 
-                  onClick={handleAddRecord} 
-                  disabled={saving} 
+                <button
+                  className="aps-add-shift-btn sqft-btn"
+                  onClick={handleAddRecord}
+                  disabled={saving}
                   style={{ gridColumn: 'span 2', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
                 >
                   <Plus size={14} /> Add Sq-Ft Work
@@ -599,7 +599,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
               {sqFtEntry.ratePerSqFt && (
                 <div style={{ padding: '6px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(156,39,176,0.08)', border: '1px solid rgba(156,39,176,0.15)', fontSize: 11, color: '#BA68C8', display: 'flex', justifyContent: 'space-between' }}>
                   <span>
-                    Estimate: {sqFtEntry.length && sqFtEntry.breadth ? `${sqFtEntry.length}×${sqFtEntry.breadth} = ` : ''} 
+                    Estimate: {sqFtEntry.length && sqFtEntry.breadth ? `${sqFtEntry.length}×${sqFtEntry.breadth} = ` : ''}
                     {sqFtEntry.length && sqFtEntry.breadth ? (parseFloat(sqFtEntry.length) * parseFloat(sqFtEntry.breadth)).toFixed(2) : '1'} SqFt × ₹{sqFtEntry.ratePerSqFt} × {sqFtEntry.labourCount || 1}
                   </span>
                   <span style={{ fontWeight: 700 }}>
@@ -625,7 +625,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                     {personTypes.map(pt => <option key={pt.id} value={pt.Name}>{pt.Name}</option>)}
                   </select>
                 </div>
-                
+
                 <div className="field">
                   <label>Count</label>
                   <input type="number" min="1" value={hourEntry.labourCount} onChange={e => setHourEntry({ ...hourEntry, labourCount: e.target.value })} />
@@ -642,10 +642,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                   </div>
                 </div>
 
-                <button 
-                  className="aps-add-shift-btn hour-btn" 
-                  onClick={handleAddRecord} 
-                  disabled={saving} 
+                <button
+                  className="aps-add-shift-btn hour-btn"
+                  onClick={handleAddRecord}
+                  disabled={saving}
                   style={{ gridColumn: 'span 2', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
                 >
                   <Plus size={14} /> Add Hour Work
@@ -675,12 +675,12 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
       {activeTab === 'misc' && (
         <>
           {/* Mason Salary Profit Section (Editable) */}
-          <div style={{ 
-            background: 'rgba(76,175,80,0.05)', 
-            border: '1px solid rgba(76,175,80,0.15)', 
-            borderRadius: 10, 
-            padding: '12px 14px', 
-            marginBottom: 16 
+          <div style={{
+            background: 'rgba(76,175,80,0.05)',
+            border: '1px solid rgba(76,175,80,0.15)',
+            borderRadius: 10,
+            padding: '12px 14px',
+            marginBottom: 16
           }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#4CAF50', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               <TrendingUp size={14} /> Mason Salary Profit for this Site
@@ -689,23 +689,23 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Weekly Site Attendance:</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(weeklySiteAttendance)}</span>
             </div>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div className="field">
                 <label>Profit (%)</label>
-                <input 
-                  type="number" 
-                  placeholder="e.g. 10" 
-                  value={profitPercent} 
+                <input
+                  type="number"
+                  placeholder="e.g. 10"
+                  value={profitPercent}
                   onChange={e => handlePercentChange(e.target.value)}
                 />
               </div>
               <div className="field">
                 <label>Profit Value (₹) (Editable)</label>
-                <input 
-                  type="number" 
-                  placeholder="e.g. 300" 
-                  value={profitAmount} 
+                <input
+                  type="number"
+                  placeholder="e.g. 300"
+                  value={profitAmount}
                   onChange={e => setProfitAmount(e.target.value)}
                 />
               </div>
@@ -718,18 +718,18 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             )}
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button 
-                onClick={handleSaveProfit} 
+              <button
+                onClick={handleSaveProfit}
                 disabled={savingProfit}
-                style={{ 
-                  flex: 1, 
-                  backgroundColor: '#4CAF50', 
-                  color: '#0F0F1A', 
-                  border: 'none', 
-                  borderRadius: '6px', 
-                  padding: '8px 12px', 
-                  fontSize: '12px', 
-                  fontWeight: '700', 
+                style={{
+                  flex: 1,
+                  backgroundColor: '#4CAF50',
+                  color: '#0F0F1A',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  fontWeight: '700',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -740,18 +740,18 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                 {savingProfit ? 'Saving...' : 'Save Profit'}
               </button>
               {profitItem && (
-                <button 
-                  onClick={handleRemoveProfit} 
+                <button
+                  onClick={handleRemoveProfit}
                   disabled={savingProfit}
-                  style={{ 
-                    backgroundColor: 'rgba(244,67,54,0.1)', 
-                    color: '#F44336', 
-                    border: '1px solid rgba(244,67,54,0.2)', 
-                    borderRadius: '6px', 
-                    padding: '8px 12px', 
-                    fontSize: '12px', 
-                    fontWeight: '600', 
-                    cursor: 'pointer' 
+                  style={{
+                    backgroundColor: 'rgba(244,67,54,0.1)',
+                    color: '#F44336',
+                    border: '1px solid rgba(244,67,54,0.2)',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
                   }}
                 >
                   Remove
@@ -779,17 +779,17 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             const busRate = parseFloat(masterSettings?.BusExpense) || 0;
             const teaTotal = weeklySiteLabourCount * teaRate;
             const busTotal = weeklySiteLabourCount * busRate;
-            
+
             const isTeaAdded = miscItems.some(m => m.name === 'Tea Charges');
             const isBusAdded = miscItems.some(m => m.name === 'Bus Charges');
 
             if (weeklySiteLabourCount > 0 && (!isTeaAdded || !isBusAdded)) {
               return (
-                <div style={{ 
-                  background: 'rgba(255,152,0,0.05)', 
-                  border: '1px solid rgba(255,152,0,0.15)', 
-                  borderRadius: 8, 
-                  padding: '12px', 
+                <div style={{
+                  background: 'rgba(255,152,0,0.05)',
+                  border: '1px solid rgba(255,152,0,0.15)',
+                  borderRadius: 8,
+                  padding: '12px',
                   marginBottom: 12,
                   display: 'flex',
                   flexDirection: 'column',
@@ -800,7 +800,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                   </div>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
                     {!isTeaAdded && (
-                      <button 
+                      <button
                         onClick={async () => {
                           setSaving(true);
                           try {
@@ -829,7 +829,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                       </button>
                     )}
                     {!isBusAdded && (
-                      <button 
+                      <button
                         onClick={async () => {
                           setSaving(true);
                           try {
@@ -891,10 +891,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
             )}
             {localLiftingRecords.map(rec => (
               <div key={rec.id} className="aps-shift-row" style={{ borderColor: 'rgba(233, 30, 99, 0.2)' }}>
-                <span className="shift-person-type" style={{ color: '#E91E63' }}>{rec.MaterialType}</span>
+                <span className="shift-person-type" style={{ color: '#bd1ee9ff' }}>{rec.MaterialType}</span>
                 <span className="shift-label">{rec.Floor}</span>
                 <span className="shift-count">×{rec.Quantity}</span>
-                <span className="shift-amount" style={{ color: '#E91E63' }}>{fmt(rec.Amount)}</span>
+                <span className="shift-amount" style={{ color: '#bd1ee9ff' }}>{fmt(rec.Amount)}</span>
                 <button className="shift-delete" onClick={() => handleDeleteLifting(rec.id)}><Trash2 size={14} /></button>
               </div>
             ))}
@@ -927,10 +927,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
               <input type="number" step="0.01" value={newLifting.rate} onChange={e => handleLiftingChange('rate', e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddLifting()} />
             </div>
 
-            <button 
-              className="aps-add-shift-btn lifting-btn" 
-              onClick={handleAddLifting} 
-              disabled={saving} 
+            <button
+              className="aps-add-shift-btn lifting-btn"
+              onClick={handleAddLifting}
+              disabled={saving}
               style={{ gridColumn: 'span 4', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
             >
               <Plus size={12} /> Log Lifting Work
@@ -946,7 +946,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
 
           <div className="aps-entry-total" style={{ background: 'rgba(233, 30, 99, 0.08)', borderColor: 'rgba(233, 30, 99, 0.2)' }}>
             <span className="total-label">Day Lifting Total</span>
-            <span className="total-value" style={{ color: '#E91E63' }}>{fmt(localLiftingRecords.reduce((s, r) => s + r.Amount, 0))}</span>
+            <span className="total-value" style={{ color: '#bd1ee9ff' }}>{fmt(localLiftingRecords.reduce((s, r) => s + r.Amount, 0))}</span>
           </div>
         </>
       )}

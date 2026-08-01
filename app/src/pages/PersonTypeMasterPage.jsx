@@ -6,7 +6,7 @@ import api from '../api/axios';
 
 const PERSON_TYPE_COLORS = [
   { bg: 'rgba(124, 77, 255, 0.08)', border: 'rgba(124, 77, 255, 0.2)', color: '#B388FF', accent: '#7C4DFF' },
-  { bg: 'rgba(233, 30, 99, 0.08)', border: 'rgba(233, 30, 99, 0.2)', color: '#F48FB1', accent: '#E91E63' },
+  { bg: 'rgba(233, 30, 99, 0.08)', border: 'rgba(233, 30, 99, 0.2)', color: '#F48FB1', accent: '#bd1ee9ff' },
   { bg: 'rgba(33, 150, 243, 0.08)', border: 'rgba(33, 150, 243, 0.2)', color: '#64B5F6', accent: '#2196F3' },
   { bg: 'rgba(255, 152, 0, 0.08)', border: 'rgba(255, 152, 0, 0.2)', color: '#FFB74D', accent: '#FF9800' },
   { bg: 'rgba(0, 150, 136, 0.08)', border: 'rgba(0, 150, 136, 0.2)', color: '#4DB6AC', accent: '#009688' },
@@ -422,7 +422,7 @@ const PersonTypeMasterPage = () => {
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
               <button
-              onClick={() => { setShowAddForm(false); setNewName(''); setNewRate(''); setNewRateUnit('Day'); }}
+                onClick={() => { setShowAddForm(false); setNewName(''); setNewRate(''); setNewRateUnit('Day'); }}
                 style={{
                   flex: 1, padding: 12, borderRadius: 10, fontSize: 13, fontWeight: 600,
                   background: 'transparent', border: '1px solid var(--border)',

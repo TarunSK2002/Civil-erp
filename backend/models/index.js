@@ -154,6 +154,10 @@ LiftingRecord.belongsTo(AttendanceSheet, { foreignKey: 'AttendanceSheetId', as: 
 Payee.hasMany(LiftingRecord, { foreignKey: 'PayeeId', as: 'LiftingRecords' });
 LiftingRecord.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
 
+// Site <-> LiftingRecord (1:N)
+Site.hasMany(LiftingRecord, { foreignKey: 'SiteId', as: 'LiftingRecords' });
+LiftingRecord.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
+
 // Associations
 Site.hasMany(DailyProgressReport, { foreignKey: 'SiteId', as: 'DPRs' });
 DailyProgressReport.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });

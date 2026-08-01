@@ -68,6 +68,9 @@ app.use('/api/master-settings', require('./routes/masterSettingsRoutes'));
 app.use('/api/undo', require('./routes/undoRoutes'));
 app.use('/api/site-sections', require('./routes/siteSectionRoutes'));
 app.use('/api/site-projects', require('./routes/siteProjectRoutes'));
+app.use('/api/dpr', require('./routes/dprRoutes'));
+app.use('/api/gps', require('./routes/gpsRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 // Database Initialization & Server Start
 async function startServer() {

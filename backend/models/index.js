@@ -151,9 +151,18 @@ LiftingRecord.belongsTo(AttendanceSheet, { foreignKey: 'AttendanceSheetId', as: 
 Payee.hasMany(LiftingRecord, { foreignKey: 'PayeeId', as: 'LiftingRecords' });
 LiftingRecord.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
 
-// Site <-> LiftingRecord (1:N)
-Site.hasMany(LiftingRecord, { foreignKey: 'SiteId', as: 'LiftingRecords' });
-LiftingRecord.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
+const LiftingChargeRate = require('./LiftingChargeRate');
+const LiftingRecord = require('./LiftingRecord');
+const DailyProgressReport = require('./DailyProgressReport');
+const GpsAttendanceLog = require('./GpsAttendanceLog');
+const PushToken = require('./PushToken');
+
+// Associations
+Site.hasMany(DailyProgressReport, { foreignKey: 'SiteId', as: 'DPRs' });
+DailyProgressReport.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
+
+Site.hasMany(GpsAttendanceLog, { foreignKey: 'SiteId', as: 'GpsLogs' });
+GpsAttendanceLog.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });
 
 module.exports = {
     sequelize,
@@ -181,5 +190,7 @@ module.exports = {
     SiteProject,
     LiftingChargeRate,
     LiftingRecord,
-
+    DailyProgressReport,
+    GpsAttendanceLog,
+    PushToken
 };

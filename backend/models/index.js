@@ -23,6 +23,9 @@ const SiteSection = require('./SiteSection');
 const SiteProject = require('./SiteProject');
 const LiftingChargeRate = require('./LiftingChargeRate');
 const LiftingRecord = require('./LiftingRecord');
+const DailyProgressReport = require('./DailyProgressReport');
+const GpsAttendanceLog = require('./GpsAttendanceLog');
+const PushToken = require('./PushToken');
 
 
 // Associations
@@ -150,12 +153,6 @@ LiftingRecord.belongsTo(AttendanceSheet, { foreignKey: 'AttendanceSheetId', as: 
 // Payee <-> LiftingRecord (1:N)
 Payee.hasMany(LiftingRecord, { foreignKey: 'PayeeId', as: 'LiftingRecords' });
 LiftingRecord.belongsTo(Payee, { foreignKey: 'PayeeId', as: 'Payee' });
-
-const LiftingChargeRate = require('./LiftingChargeRate');
-const LiftingRecord = require('./LiftingRecord');
-const DailyProgressReport = require('./DailyProgressReport');
-const GpsAttendanceLog = require('./GpsAttendanceLog');
-const PushToken = require('./PushToken');
 
 // Associations
 Site.hasMany(DailyProgressReport, { foreignKey: 'SiteId', as: 'DPRs' });

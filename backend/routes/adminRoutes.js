@@ -33,4 +33,23 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// GET all action logs for system audit
+router.get('/logs', async (req, res) => {
+  try {
+    const { ActionLog, User, WeeklyPaySheet } = require('../models');
+    const logs = await ActionLog.findAll({
+      order: [['CreatedAt', 'DESC']],
+      limit: 100,
+      include: [
+        { model: User, as: 'User', attributes: ['id', 'Username', 'FullName', 'Role'] },
+        { model: WeeklyPaySheet, as: 'Sheet', attributes: ['id', 'Title'] }
+      ]
+    });
+    res.json(logs);
+  } catch (err) {
+    console.error('Fetch logs error:', err);
+    res.status(500).json({ msg: err.message });
+  }
+});
+
 module.exports = router;

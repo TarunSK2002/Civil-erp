@@ -118,6 +118,10 @@ Material.belongsTo(MaterialType, { foreignKey: 'MaterialTypeId', as: 'MaterialTy
 WeeklyPaySheet.hasMany(ActionLog, { foreignKey: 'WeeklyPaySheetId', as: 'ActionLogs' });
 ActionLog.belongsTo(WeeklyPaySheet, { foreignKey: 'WeeklyPaySheetId', as: 'Sheet' });
 
+// User <-> ActionLog (1:N)
+User.hasMany(ActionLog, { foreignKey: 'UserId', as: 'ActionLogs' });
+ActionLog.belongsTo(User, { foreignKey: 'UserId', as: 'User' });
+
 // Site <-> SiteSection (1:N)
 Site.hasMany(SiteSection, { foreignKey: 'SiteId', as: 'Sections' });
 SiteSection.belongsTo(Site, { foreignKey: 'SiteId', as: 'Site' });

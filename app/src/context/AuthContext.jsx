@@ -16,13 +16,18 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData) => {
     const userProfile = userData && userData.user ? userData.user : userData;
+    const token = userData && userData.token ? userData.token : null;
     setUser(userProfile);
     sessionStorage.setItem('user', JSON.stringify(userProfile));
+    if (token) {
+      sessionStorage.setItem('token', token);
+    }
   };
 
   const logout = () => {
     setUser(null);
     sessionStorage.removeItem('user');
+    sessionStorage.removeItem('token');
   };
 
   return (

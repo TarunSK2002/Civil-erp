@@ -76,7 +76,7 @@ const DashboardPage = () => {
     { title: 'Attendance Pay Sheets', count: stats.totalAttendanceSheets, path: '/attendance-pay-sheet', icon: ClipboardList, color: '#f43f5e', desc: 'Manage daily attendance sheets' },
     { title: 'Weekly Pay Sheets', count: stats.totalWeeklySheets, path: '/weekly-pay-sheet', icon: FileSpreadsheet, color: '#8b5cf6', desc: 'Weekly wages & billing summaries', adminOnly: true },
     { title: 'Petty Cash', count: stats.totalPettyCash, path: '/personal-expenses', icon: Wallet, color: '#14b8a6', desc: 'Record personal and office expenses', adminOnly: true },
-  ].filter(card => !card.adminOnly || user?.role === 'ADMIN');
+  ].filter(card => !card.adminOnly || user?.role?.toUpperCase() === 'ADMIN');
 
   return (
     <div style={{ padding: '24px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
@@ -120,7 +120,7 @@ const DashboardPage = () => {
           icon={Home} 
           color="#1B5E20" 
         />
-        {user?.role === 'ADMIN' && (
+        {user?.role?.toUpperCase() === 'ADMIN' && (
           <>
             <StatCard 
               title="Today's Payments" 

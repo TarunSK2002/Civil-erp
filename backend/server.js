@@ -75,74 +75,16 @@ app.use('/api/notifications', require('./routes/notificationRoutes'));
 // Database Initialization & Server Start
 async function startServer() {
     try {
-        // 1. Connect and Sync
-        await sequelize.authenticate();
-        console.log('Database connected...');
-
-        // Use standard sync to avoid foreign key drop errors
-        await sequelize.sync();
-        console.log('Database synchronized.');
-
-        // Run migrations for newly added columns
-        try {
-            await sequelize.query("ALTER TABLE person_types ADD COLUMN RateUnit VARCHAR(10) NOT NULL DEFAULT 'Day';");
-            console.log('Added RateUnit column to person_types database table.');
-        } catch (err) {
-            // Column already exists or table doesn't exist yet, which is fine
-        }
-
-        try {
-            await sequelize.query("ALTER TABLE attendance_records ADD COLUMN Hours DECIMAL(10, 2) NULL;");
-            console.log('Added Hours column to attendance_records.');
-        } catch (err) {}
-
-        try {
-            await sequelize.query("ALTER TABLE attendance_records ADD COLUMN RatePerHour DECIMAL(18, 2) NULL;");
-            console.log('Added RatePerHour column to attendance_records.');
-        } catch (err) {}
-
-        try {
-            await sequelize.query("ALTER TABLE site_materials ADD COLUMN BillNo VARCHAR(50) NULL DEFAULT '';");
-            console.log('Added BillNo column to site_materials table.');
-        } catch (err) {}
-
-        // Ensure master_settings table exists and is seeded with defaults
-        await sequelize.query(`
-            CREATE TABLE IF NOT EXISTS master_settings (
-                Id INT AUTO_INCREMENT PRIMARY KEY,
-                SettingKey VARCHAR(100) NOT NULL UNIQUE,
-                SettingValue VARCHAR(255) NOT NULL DEFAULT '',
-                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            );
-        `);
-        await sequelize.query(`INSERT IGNORE INTO master_settings (SettingKey, SettingValue) VALUES ('TeaExpense', '20'), ('BusExpense', '50'), ('LatestAppVersion', '3.2.0'), ('UpdateLink', 'https://drive.google.com');`);
-        await sequelize.query(`UPDATE master_settings SET SettingValue = '3.2.0' WHERE SettingKey = 'LatestAppVersion';`);
-        console.log('MySQL master_settings table verified/created.');
-
-        // 2. Ensure Default Admin User exists
-        const { User } = require('./models');
-        const adminCount = await User.count();
-        if (adminCount === 0) {
-            const bcrypt = require('bcryptjs');
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('admin123', salt);
-
-            await User.create({
-                Username: 'admin',
-                PasswordHash: hashedPassword,
-                Role: 'ADMIN',
-                FullName: 'Administrator',
-                CreatedAt: new Date()
-            });
-            console.log('Default admin user created (admin/admin123)');
-        }
-
-        // 3. Start listening
+        // 1. Start listening immediately so server handles health checks and incoming HTTP requests instantly
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
         });
+
+        // 2. Authenticate Database Connection
+        await sequelize.authenticate();
+        console.log('Database connected successfully.');
     } catch (err) {
-        console.error('Failed to start server:', err);
+        console.error('Failed to start server or connect to database:', err);
     }
 }
 

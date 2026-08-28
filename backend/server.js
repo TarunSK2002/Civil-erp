@@ -91,6 +91,15 @@ app.use('/api/dpr', require('./routes/dprRoutes'));
 app.use('/api/gps', require('./routes/gpsRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error('API Error:', err);
+    res.status(err.status || 500).json({
+        status: 'ERROR',
+        message: err.message || 'Internal Server Error'
+    });
+});
+
 // Database Initialization & Server Start
 async function startServer() {
     try {

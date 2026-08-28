@@ -1,4 +1,5 @@
 const { Sequelize } = require('sequelize');
+const mysql2 = require('mysql2');
 require('dotenv').config();
 
 console.log('Initializing MySQL connection to host:', process.env.DB_HOST);
@@ -10,6 +11,7 @@ const sequelize = new Sequelize(
         host: process.env.DB_HOST || '103.86.176.249',
         port: parseInt(process.env.DB_PORT, 10) || 3306,
         dialect: 'mysql',
+        dialectModule: mysql2,
         logging: false,
         dialectOptions: {
             connectTimeout: 20000

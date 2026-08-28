@@ -3,11 +3,12 @@ const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
 
-// Default fallbacks for packaged app where .env might not be included
-process.env.DB_NAME = process.env.DB_NAME || 'jeeva_construction';
-process.env.DB_USER = process.env.DB_USER || 'root';
-process.env.DB_PASS = process.env.DB_PASS || '12345678';
-process.env.DB_HOST = process.env.DB_HOST || '127.0.0.1';
+// Default fallbacks for cloud / packaged app where .env might not be included
+process.env.DB_NAME = process.env.DB_NAME || 'tideorca1_Jeeva_Construction';
+process.env.DB_USER = process.env.DB_USER || 'tideorca1_admin';
+process.env.DB_PASS = process.env.DB_PASS || 'Password0@';
+process.env.DB_HOST = process.env.DB_HOST || '103.86.176.249';
+process.env.DB_PORT = process.env.DB_PORT || '3306';
 process.env.PORT = process.env.PORT || 5000;
 
 const { sequelize } = require('./models');

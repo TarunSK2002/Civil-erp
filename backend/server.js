@@ -43,6 +43,10 @@ app.use(express.json());
 // Global Rate Limiter
 app.use(generalLimiter);
 
+// Lightweight test routes
+app.get('/ping', (req, res) => res.json({ status: 'OK', service: 'jeeva-backend', time: new Date().toISOString() }));
+app.get('/api/ping', (req, res) => res.json({ status: 'OK', service: 'jeeva-backend', time: new Date().toISOString() }));
+
 // Health check routes
 app.get('/health', async (req, res) => {
     try {

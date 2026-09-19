@@ -23,6 +23,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
+app.set('etag', false);
+
 // CORS config
 const corsOptions = {
   origin: true,
@@ -30,6 +32,30 @@ const corsOptions = {
   credentials: true
 };
 app.use(cors(corsOptions));
+
+// Explicit CORS and No-Cache header injector (prevents Vercel 304 missing CORS headers)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, QUERY');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-User-Id, X-User-Role, Accept');
+  
+  // Disable 304 caching so browsers always receive fresh data with full CORS headers
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(express.json());
 
 // Global Rate Limiter

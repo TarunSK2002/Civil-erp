@@ -19,6 +19,11 @@ async function ensureContractColumns() {
             });
         }
 
+        // Ensure shift-specific columns allow NULL for Hour and SqFt modes
+        await sequelize.query('ALTER TABLE attendance_records MODIFY COLUMN ShiftType VARCHAR(30) NULL DEFAULT NULL').catch(() => {});
+        await sequelize.query('ALTER TABLE attendance_records MODIFY COLUMN ShiftMultiplier DECIMAL(3,1) NULL DEFAULT NULL').catch(() => {});
+        await sequelize.query('ALTER TABLE attendance_records MODIFY COLUMN RatePerShift DECIMAL(18,2) NULL DEFAULT NULL').catch(() => {});
+
         // 2. Check weekly_pay_sheet_items columns
         const sheetItemTableInfo = await queryInterface.describeTable('weekly_pay_sheet_items').catch(() => ({}));
         if (!sheetItemTableInfo.GrossAmount && !sheetItemTableInfo.gross_amount) {

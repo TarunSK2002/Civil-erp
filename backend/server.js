@@ -24,19 +24,8 @@ app.use(helmet({
 }));
 
 // CORS config
-const whitelist = [
-  'http://localhost:3000', 
-  'http://localhost:5173', 
-  'http://localhost:8080'
-];
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || whitelist.indexOf(origin) !== -1 || origin.startsWith('http://localhost:') || origin.endsWith('.vercel.app')) {
-      callback(null, true);
-    } else {
-      callback(null, true);
-    }
-  },
+  origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'QUERY'],
   credentials: true
 };

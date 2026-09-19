@@ -23,7 +23,6 @@ import AttendancePaySheetPage from './pages/AttendancePaySheetPage';
 import ShiftMasterPage from './pages/ShiftMasterPage';
 import PersonTypeMasterPage from './pages/PersonTypeMasterPage';
 import PersonalExpensePage from './pages/PersonalExpensePage';
-import SupervisorAttendancePage from './pages/SupervisorAttendancePage';
 
 // Layout
 import MainLayout from './layouts/MainLayout';
@@ -63,8 +62,6 @@ function App() {
               <Route path="payees" element={<PayeePage />} />
               <Route path="weekly-pay-sheet" element={<WeeklyPaySheetPage />} />
               <Route path="attendance-pay-sheet" element={<AttendancePaySheetPage />} />
-              <Route path="daily-attendance" element={<SupervisorAttendancePage />} />
-              <Route path="supervisor-attendance" element={<SupervisorAttendancePage />} />
               <Route path="shift-master" element={<ShiftMasterPage />} />
               <Route path="person-type-master" element={<PersonTypeMasterPage />} />
               <Route path="personal-expenses" element={<PersonalExpensePage />} />

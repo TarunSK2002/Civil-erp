@@ -81,140 +81,6 @@ router.post('/', async (req, res) => {
     }
 });
 
-// @route   GET /api/attendance-sheets/daily
-// @desc    Get site-wise grouped attendance records for a specific date
-router.get('/daily', async (req, res) => {
-    try {
-        const targetDate = req.query.date || new Date().toISOString().split('T')[0];
-        
-        // 1. Find matching sheet for targetDate (or latest sheet)
-        let sheet = await AttendanceSheet.findOne({
-            where: {
-                WeekStartDate: { [Op.lte]: targetDate },
-                WeekEndDate: { [Op.gte]: targetDate }
-            },
-            order: [['WeekStartDate', 'DESC']]
-        });
-        if (!sheet) {
-            sheet = await AttendanceSheet.findOne({
-                order: [['WeekStartDate', 'DESC']]
-            });
-        }
-
-        // 2. Fetch all attendance records for targetDate
-        const records = await AttendanceRecord.findAll({
-            where: { AttendanceDate: targetDate },
-            include: [
-                { model: Payee, as: 'Payee', attributes: ['id', 'Name', 'Type', 'MobileNo'] },
-                { model: Site, as: 'Site', attributes: ['Id', 'SiteName', 'ConstructionType'] }
-            ],
-            order: [['SiteId', 'ASC'], ['CreatedAt', 'ASC'], ['id', 'ASC']]
-        });
-
-        // 3. Fetch misc records for targetDate
-        const [miscs] = await sequelize.query(`
-            SELECT m.*, p.Name as PayeeName, p.Type as PayeeType, s.SiteName 
-            FROM attendance_miscs m
-            LEFT JOIN payees p ON m.PayeeId = p.id
-            LEFT JOIN sites s ON m.SiteId = s.Id
-            WHERE DATE(m.CreatedAt) = :targetDate AND m.is_deleted = 0
-            ORDER BY m.id ASC
-        `, { replacements: { targetDate } });
-
-        // 4. Group by Site
-        const siteMap = {};
-        records.forEach(rec => {
-            const siteId = rec.SiteId || 0;
-            const siteName = rec.Site?.SiteName || 'Unassigned Site';
-            if (!siteMap[siteId]) {
-                siteMap[siteId] = {
-                    siteId,
-                    siteName,
-                    constructionType: rec.Site?.ConstructionType || 'Normal',
-                    totalAmount: 0,
-                    workerCount: 0,
-                    entries: []
-                };
-            }
-            const amt = parseFloat(rec.CalculatedAmount || 0);
-            siteMap[siteId].totalAmount += amt;
-            siteMap[siteId].workerCount += parseInt(rec.LabourCount || 1);
-            siteMap[siteId].entries.push({
-                type: 'attendance',
-                id: rec.id,
-                payeeId: rec.PayeeId,
-                payeeName: rec.Payee?.Name || 'Unknown Labour',
-                payeeType: rec.Payee?.Type || 'Labour',
-                personType: rec.PersonType,
-                calculationMode: rec.CalculationMode,
-                shiftType: rec.ShiftType,
-                shiftMultiplier: rec.ShiftMultiplier,
-                labourCount: rec.LabourCount,
-                ratePerShift: rec.RatePerShift,
-                hours: rec.Hours,
-                ratePerHour: rec.RatePerHour,
-                length: rec.Length,
-                breadth: rec.Breadth,
-                sqFt: rec.SqFt,
-                ratePerSqFt: rec.RatePerSqFt,
-                workDescription: rec.WorkDescription,
-                deductionSqFt: rec.DeductionSqFt,
-                calculatedAmount: amt
-            });
-        });
-
-        // Add miscs to site groups
-        (miscs || []).forEach(m => {
-            const siteId = m.SiteId || 0;
-            const siteName = m.SiteName || 'General Expenses';
-            if (!siteMap[siteId]) {
-                siteMap[siteId] = {
-                    siteId,
-                    siteName,
-                    constructionType: 'Normal',
-                    totalAmount: 0,
-                    workerCount: 0,
-                    entries: []
-                };
-            }
-            const amt = parseFloat(m.Amount || 0);
-            siteMap[siteId].totalAmount += amt;
-            siteMap[siteId].entries.push({
-                type: 'misc',
-                id: m.id,
-                payeeId: m.PayeeId,
-                payeeName: m.PayeeName || 'Misc Expense',
-                payeeType: m.PayeeType || 'Supplier',
-                miscName: m.MiscName,
-                calculatedAmount: amt
-            });
-        });
-
-        const siteGroups = Object.values(siteMap);
-        const totalAmount = siteGroups.reduce((s, g) => s + g.totalAmount, 0);
-        const totalWorkers = records.reduce((s, r) => s + parseInt(r.LabourCount || 1), 0);
-
-        res.json({
-            date: targetDate,
-            sheet: sheet ? {
-                id: sheet.id,
-                title: sheet.Title,
-                weekStartDate: sheet.WeekStartDate,
-                weekEndDate: sheet.WeekEndDate,
-                status: sheet.Status
-            } : null,
-            siteGroups,
-            rawRecords: records,
-            totalAmount,
-            totalWorkers,
-            sitesCount: siteGroups.length
-        });
-    } catch (err) {
-        console.error('GET /api/attendance-sheets/daily error:', err);
-        res.status(500).json({ msg: 'Server Error', error: err.message });
-    }
-});
-
 // @route   GET /api/attendance-sheets/:id
 // @desc    Get sheet with full grid data
 router.get('/:id', async (req, res) => {
@@ -357,36 +223,11 @@ router.get('/:id', async (req, res) => {
             dates,
             selectedPayeeIds: allPayeeIds,
             selectedSiteIds: allSiteIds,
-            liftingRecords,
-            records
+            liftingRecords
         });
     } catch (err) {
         console.error(err.message, err.stack);
         res.status(500).json({ msg: 'Server Error', error: err.message, stack: err.stack });
-    }
-});
-
-// @route   GET /api/attendance-sheets/:id/records
-// @desc    Get all records for a sheet with Payee and Site details
-router.get('/:id/records', async (req, res) => {
-    try {
-        const where = { AttendanceSheetId: req.params.id };
-        if (req.query.date) where.AttendanceDate = req.query.date;
-        if (req.query.siteId) where.SiteId = req.query.siteId;
-        if (req.query.payeeId) where.PayeeId = req.query.payeeId;
-
-        const records = await AttendanceRecord.findAll({
-            where,
-            include: [
-                { model: Payee, as: 'Payee', attributes: ['id', 'Name', 'Type'] },
-                { model: Site, as: 'Site', attributes: ['Id', 'SiteName', 'ConstructionType'] }
-            ],
-            order: [['AttendanceDate', 'ASC'], ['id', 'ASC']]
-        });
-        res.json(records);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ msg: 'Server Error' });
     }
 });
 
@@ -619,31 +460,8 @@ router.post('/:id/records', async (req, res) => {
             Hours: mode === 'Hour' && Hours ? parseFloat(Hours) : null,
             RatePerHour: mode === 'Hour' ? parseFloat(RatePerHour) : null,
             SectionId: mode === 'SqFt' && SectionId ? parseInt(SectionId) : null,
-            CalculatedAmount: calculatedAmount,
-            CreatedByUserId: req.user?.id || req.body.CreatedByUserId || null
+            CalculatedAmount: calculatedAmount
         });
-
-        // Ensure Payee and Site are in sheet's selected lists
-        try {
-            let sheetUpdated = false;
-            let pIds = Array.isArray(sheet.SelectedPayeeIds) ? [...sheet.SelectedPayeeIds] : [];
-            let sIds = Array.isArray(sheet.SelectedSiteIds) ? [...sheet.SelectedSiteIds] : [];
-            if (!pIds.includes(parseInt(PayeeId))) {
-                pIds.push(parseInt(PayeeId));
-                sheet.SelectedPayeeIds = pIds;
-                sheetUpdated = true;
-            }
-            if (!sIds.includes(parseInt(SiteId))) {
-                sIds.push(parseInt(SiteId));
-                sheet.SelectedSiteIds = sIds;
-                sheetUpdated = true;
-            }
-            if (sheetUpdated) {
-                await sheet.save();
-            }
-        } catch (syncErr) {
-            console.warn('Auto-sync sheet payee/site warning:', syncErr.message);
-        }
 
         await syncMiscAllowances(record.AttendanceSheetId, record.PayeeId, record.SiteId);
 

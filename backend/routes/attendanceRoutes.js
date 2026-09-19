@@ -178,11 +178,13 @@ router.get('/:id', async (req, res) => {
             }
             const amt = parseFloat(m.Amount || 0);
             miscData[m.PayeeId].total += amt;
+            const itemDate = m.CreatedAt ? (typeof m.CreatedAt === 'string' ? m.CreatedAt.split('T')[0].split(' ')[0] : new Date(m.CreatedAt).toISOString().split('T')[0]) : null;
             miscData[m.PayeeId].items.push({
                 id: m.id,
                 name: m.MiscName,
                 amount: amt,
-                siteId: m.SiteId
+                siteId: m.SiteId,
+                date: itemDate
             });
 
             if (m.SiteId) {
@@ -595,19 +597,25 @@ router.delete('/:id/records/:recordId', async (req, res) => {
 // @route   POST /api/attendance-sheets/:id/misc
 // @desc    Add misc charge for a mason
 router.post('/:id/misc', async (req, res) => {
-        const { PayeeId, SiteId, MiscName, Amount } = req.body;
-        try {
-            const sheet = await AttendanceSheet.findByPk(req.params.id);
-            if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
-    
-            const misc = await AttendanceMisc.create({
-                AttendanceSheetId: parseInt(req.params.id),
-                PayeeId: parseInt(PayeeId),
-                SiteId: SiteId ? parseInt(SiteId) : null,
-                MiscName,
-                Amount: parseFloat(Amount) || 0
-            });
+    const { PayeeId, SiteId, MiscName, Amount, date, Date: reqDate } = req.body;
+    try {
+        const sheet = await AttendanceSheet.findByPk(req.params.id);
+        if (!sheet) return res.status(404).json({ msg: 'Sheet not found' });
 
+        const targetDate = date || reqDate;
+        const createData = {
+            AttendanceSheetId: parseInt(req.params.id),
+            PayeeId: parseInt(PayeeId),
+            SiteId: SiteId ? parseInt(SiteId) : null,
+            MiscName,
+            Amount: parseFloat(Amount) || 0
+        };
+
+        if (targetDate) {
+            createData.CreatedAt = new Date(targetDate + 'T12:00:00Z');
+        }
+
+        const misc = await AttendanceMisc.create(createData);
         res.json(misc);
     } catch (err) {
         console.error(err.message);

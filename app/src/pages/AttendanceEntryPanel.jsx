@@ -258,7 +258,8 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
         PayeeId: payeeId,
         SiteId: siteId,
         MiscName: name,
-        Amount: amt
+        Amount: amt,
+        date
       });
 
       fetchMisc();
@@ -401,7 +402,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
     setSaving(true);
     try {
       await api.post(`/attendance-sheets/${sheetId}/misc`, {
-        PayeeId: payeeId, SiteId: siteId, MiscName: newMisc.name, Amount: parseFloat(newMisc.amount)
+        PayeeId: payeeId, SiteId: siteId, MiscName: newMisc.name, Amount: parseFloat(newMisc.amount), date
       });
       setNewMisc({ name: '', amount: '' });
       fetchMisc();
@@ -964,7 +965,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                           setSaving(true);
                           try {
                             await api.post(`/attendance-sheets/${sheetId}/misc`, {
-                              PayeeId: payeeId, SiteId: siteId, MiscName: 'Tea Charges', Amount: teaTotal
+                              PayeeId: payeeId, SiteId: siteId, MiscName: 'Tea Charges', Amount: teaTotal, date
                             });
                             fetchMisc();
                             onSaved();
@@ -993,7 +994,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                           setSaving(true);
                           try {
                             await api.post(`/attendance-sheets/${sheetId}/misc`, {
-                              PayeeId: payeeId, SiteId: siteId, MiscName: 'Bus Charges', Amount: busTotal
+                              PayeeId: payeeId, SiteId: siteId, MiscName: 'Bus Charges', Amount: busTotal, date
                             });
                             fetchMisc();
                             onSaved();

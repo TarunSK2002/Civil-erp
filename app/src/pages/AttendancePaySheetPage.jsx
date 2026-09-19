@@ -179,7 +179,7 @@ const AttendancePaySheetPage = () => {
 
   // ---- Computed values (DATE-SPECIFIC for selected entryDate) ----
 
-  // Get total attendance for a payee+site for the SELECTED DATE
+  // Get total attendance for a payee+site for the SELECTED DATE (including lifting and misc)
   const getDateCellAmount = (payeeId, siteId) => {
     if (!sheetData?.grid) return 0;
     const key = `${payeeId}_${siteId}`;
@@ -192,7 +192,18 @@ const AttendancePaySheetPage = () => {
       .filter(l => l.PayeeId === payeeId && l.SiteId === siteId && l.LiftingDate === entryDate)
       .reduce((sum, l) => sum + parseFloat(l.Amount || 0), 0);
 
-    return baseAmt + liftingAmt;
+    const miscAmt = (sheetData.miscData?.[payeeId]?.items || [])
+      .filter(m => m.siteId === siteId && (!m.date || m.date === entryDate))
+      .reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
+
+    return baseAmt + liftingAmt + miscAmt;
+  };
+
+  const getDateMiscAmount = (payeeId, siteId) => {
+    if (!sheetData?.miscData) return 0;
+    return (sheetData.miscData?.[payeeId]?.items || [])
+      .filter(m => m.siteId === siteId && (!m.date || m.date === entryDate))
+      .reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
   };
 
   // Get total labour count for a payee+site for the SELECTED DATE (for tea/bus calculation)
@@ -439,6 +450,7 @@ const AttendancePaySheetPage = () => {
                     {sheetData.sites.map(site => {
                       const dateAmt = getDateCellAmount(payee.id, site.id);
                       const labourCount = getDateLabourCount(payee.id, site.id);
+                      const miscAmt = getDateMiscAmount(payee.id, site.id);
 
                       return (
                         <td key={site.id}>
@@ -446,6 +458,7 @@ const AttendancePaySheetPage = () => {
                             {dateAmt > 0 ? <>
                               <span className="aps-cell-amount">{fmt(dateAmt)}</span>
                               {labourCount > 0 && <span className="aps-cell-detail">{labourCount} workers</span>}
+                              {miscAmt > 0 && labourCount === 0 && <span className="aps-cell-detail" style={{ color: '#00BCD4' }}>misc</span>}
                             </> : <span>—</span>}
                           </div>
                         </td>

@@ -102,6 +102,13 @@ router.put('/:id', async (req, res) => {
                         CalculatedAmount: newCalculated
                     }, { transaction: t });
                     updatedRecords++;
+                } else if (record.CalculationMode === 'SqFt' && type.RateUnit === 'SqFt') {
+                    const newCalculated = (parseFloat(record.SqFt) || 0) * newRate * (record.LabourCount || 1);
+                    await record.update({
+                        RatePerSqFt: newRate,
+                        CalculatedAmount: newCalculated
+                    }, { transaction: t });
+                    updatedRecords++;
                 }
             }
 
@@ -246,6 +253,13 @@ router.post('/:id/update-rate', async (req, res) => {
                 const newCalculated = effectiveRate * parseFloat(record.ShiftMultiplier) * record.LabourCount;
                 await record.update({
                     RatePerShift: effectiveRate,
+                    CalculatedAmount: newCalculated
+                }, { transaction: t });
+                updatedRecords++;
+            } else if (record.CalculationMode === 'SqFt' && type.RateUnit === 'SqFt') {
+                const newCalculated = (parseFloat(record.SqFt) || 0) * newRate * (record.LabourCount || 1);
+                await record.update({
+                    RatePerSqFt: newRate,
                     CalculatedAmount: newCalculated
                 }, { transaction: t });
                 updatedRecords++;

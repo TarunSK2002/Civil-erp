@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Home, Users, Ruler, MapPin, HardHat, Package,
   IndianRupee, CheckCircle2, Clock, Loader2, Calendar, FileText, RotateCcw,
-  Plus, Trash2, Edit, Check, X, ArrowUpDown, ArrowUp, ArrowDown
+  Plus, Trash2, Edit, Check, X, ArrowUpDown, ArrowUp, ArrowDown, Zap,
+  AlertTriangle, TrendingUp
 } from 'lucide-react';
 import api from '../api/axios';
 import { useSortableData } from '../hooks/useSortableData';
@@ -75,6 +76,11 @@ const SiteDetailPage = () => {
       : <ArrowDown size={12} style={{ marginLeft: '4px', color: 'var(--accent)', verticalAlign: 'middle' }} />;
   };
 
+  // Contract Rates state
+  const [allPayees, setAllPayees] = useState([]);
+  const [contractInput, setContractInput] = useState({ payeeId: '', role: '', ratePerSqFt: '', totalSqFt: '' });
+  const [savingContract, setSavingContract] = useState(false);
+
   useEffect(() => {
     fetchSiteDetail();
   }, [id]);
@@ -84,8 +90,98 @@ const SiteDetailPage = () => {
       fetchSections();
     } else if (activeTab === 'projects') {
       fetchProjects();
+    } else if (activeTab === 'contracts') {
+      fetchPayees();
     }
   }, [activeTab]);
+
+  const fetchPayees = async () => {
+    try {
+      const res = await api.get('/payees');
+      setAllPayees(res.data);
+    } catch (e) {
+      console.error('Failed to fetch payees', e);
+    }
+  };
+
+  const handleAddContractRate = async () => {
+    if (!contractInput.payeeId) {
+      alert('Please select a person.');
+      return;
+    }
+    if (!contractInput.ratePerSqFt || isNaN(contractInput.ratePerSqFt) || parseFloat(contractInput.ratePerSqFt) <= 0) {
+      alert('Please enter a valid rate per Sq.Ft.');
+      return;
+    }
+    const selectedPayee = allPayees.find(p => String(p.id) === String(contractInput.payeeId));
+    if (!selectedPayee) return;
+
+    const currentRates = Array.isArray(site?.ContractRates) ? [...site.ContractRates] : [];
+    if (currentRates.some(cr => String(cr.payeeId) === String(contractInput.payeeId))) {
+      alert('This contractor is already added.');
+      return;
+    }
+
+    const scopeSqFt = parseFloat(contractInput.totalSqFt) || 0;
+    const rate = parseFloat(contractInput.ratePerSqFt);
+    const updatedRates = [
+      ...currentRates,
+      {
+        payeeId: selectedPayee.id,
+        payeeName: selectedPayee.Name,
+        role: contractInput.role || selectedPayee.Type || 'Contractor',
+        totalSqFt: scopeSqFt,
+        ratePerSqFt: rate,
+        totalAmount: scopeSqFt * rate
+      }
+    ];
+
+    setSavingContract(true);
+    try {
+      await api.patch(`/sites/${id}/contract-rates`, {
+        ConstructionType: 'Contract',
+        ContractRates: updatedRates
+      });
+      await fetchSiteDetail();
+      setContractInput({ payeeId: '', role: '', ratePerSqFt: '', totalSqFt: '' });
+    } catch (err) {
+      alert('Failed to save contract rate: ' + (err.response?.data?.msg || err.message));
+    } finally {
+      setSavingContract(false);
+    }
+  };
+
+  const handleRemoveContractRate = async (payeeIdToRemove) => {
+    if (!window.confirm('Remove this contractor from contract rates?')) return;
+    const currentRates = Array.isArray(site?.ContractRates) ? site.ContractRates : [];
+    const updatedRates = currentRates.filter(cr => String(cr.payeeId) !== String(payeeIdToRemove));
+
+    setSavingContract(true);
+    try {
+      await api.patch(`/sites/${id}/contract-rates`, {
+        ContractRates: updatedRates
+      });
+      await fetchSiteDetail();
+    } catch (err) {
+      alert('Failed to remove contractor rate: ' + (err.response?.data?.msg || err.message));
+    } finally {
+      setSavingContract(false);
+    }
+  };
+
+  const handleToggleConstructionType = async (newType) => {
+    setSavingContract(true);
+    try {
+      await api.patch(`/sites/${id}/contract-rates`, {
+        ConstructionType: newType
+      });
+      await fetchSiteDetail();
+    } catch (err) {
+      alert('Failed to update construction type: ' + (err.response?.data?.msg || err.message));
+    } finally {
+      setSavingContract(false);
+    }
+  };
 
   const fetchSiteDetail = async () => {
     setLoading(true);
@@ -364,6 +460,25 @@ const SiteDetailPage = () => {
                     {site.Client.PaymentType}
                   </span>
                 )}
+                {site.ConstructionType === 'Contract' ? (
+                  <span className="site-meta-badge" style={{
+                    background: 'rgba(234, 179, 8, 0.15)',
+                    color: '#eab308',
+                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}>
+                    <Zap size={12} /> Contract Basis ({Array.isArray(site.ContractRates) ? site.ContractRates.length : 0} persons)
+                  </span>
+                ) : (
+                  <span className="site-meta-badge" style={{
+                    background: 'rgba(59, 130, 246, 0.08)',
+                    color: 'var(--text-muted)'
+                  }}>
+                    Normal Payment
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -456,6 +571,12 @@ const SiteDetailPage = () => {
             onClick={() => setActiveTab('projects')}
           >
             Projects & Work Orders
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'contracts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('contracts')}
+          >
+            ⚡ Contract Rates ({Array.isArray(site.ContractRates) ? site.ContractRates.length : 0})
           </button>
         </div>
 
@@ -771,6 +892,489 @@ const SiteDetailPage = () => {
             ) : (
               <div className="site-payment-empty">
                 No repeat projects or work orders found. Click "New Project" to register repeat contracts for this site.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contracts Tab */}
+        {activeTab === 'contracts' && (
+          <div className="site-payment-section">
+            <div className="site-payment-header">
+              <h3>
+                <div className="section-icon" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#eab308' }}><Zap size={16} /></div>
+                Contract Basis Persons & Labour Payment Tally
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={fetchSiteDetail}
+                  disabled={loading || savingContract}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Recalculate live measurements and payments"
+                >
+                  <RotateCcw size={13} className={loading ? 'animate-spin' : ''} /> Refresh Tallies
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Site Type:</span>
+                  <div style={{ display: 'inline-flex', borderRadius: '8px', padding: '2px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleConstructionType('Normal')}
+                      disabled={savingContract}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: site.ConstructionType !== 'Contract' ? 'var(--accent)' : 'transparent',
+                        color: site.ConstructionType !== 'Contract' ? '#0F0F1A' : 'var(--text-muted)'
+                      }}
+                    >
+                      Normal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleConstructionType('Contract')}
+                      disabled={savingContract}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: site.ConstructionType === 'Contract' ? '#eab308' : 'transparent',
+                        color: site.ConstructionType === 'Contract' ? '#000' : 'var(--text-muted)'
+                      }}
+                    >
+                      Contract Basis
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI Summary Cards */}
+            {(() => {
+              const contractRates = Array.isArray(site.ContractRates) ? site.ContractRates : [];
+              if (contractRates.length === 0) return null;
+              const summary = site.ContractSummary || {
+                totalScopeSqFt: contractRates.reduce((s, cr) => s + (parseFloat(cr.totalSqFt) || 0), 0),
+                totalExecutedSqFt: contractRates.reduce((s, cr) => s + (parseFloat(cr.completedSqFt) || 0), 0),
+                totalContractBudget: contractRates.reduce((s, cr) => s + (parseFloat(cr.totalAmount) || ((parseFloat(cr.totalSqFt) || 0) * (parseFloat(cr.ratePerSqFt) || 0))), 0),
+                totalEarned: contractRates.reduce((s, cr) => s + (parseFloat(cr.workValueEarned) || 0), 0),
+                totalPaid: contractRates.reduce((s, cr) => s + (parseFloat(cr.totalPaid) || 0), 0),
+                balancePayable: contractRates.reduce((s, cr) => s + (parseFloat(cr.balancePayable) || Math.max(0, (parseFloat(cr.workValueEarned) || 0) - (parseFloat(cr.totalPaid) || 0))), 0),
+                contractorsCount: contractRates.length
+              };
+
+              return (
+                <div className="contract-tally-cards">
+                  <div className="contract-tally-card">
+                    <div className="card-top">
+                      <span className="card-title">Contract Budget</span>
+                      <div className="card-icon-mini" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#eab308' }}>
+                        <IndianRupee size={15} />
+                      </div>
+                    </div>
+                    <div className="card-metric" style={{ color: '#eab308' }}>
+                      {fmt(summary.totalContractBudget)}
+                    </div>
+                    <div className="card-subtext">
+                      {summary.contractorsCount} contractor{summary.contractorsCount !== 1 ? 's' : ''} assigned
+                    </div>
+                  </div>
+
+                  <div className="contract-tally-card">
+                    <div className="card-top">
+                      <span className="card-title">Scope vs Executed</span>
+                      <div className="card-icon-mini" style={{ background: 'rgba(0, 188, 212, 0.15)', color: '#00bcd4' }}>
+                        <Ruler size={15} />
+                      </div>
+                    </div>
+                    <div className="card-metric" style={{ color: '#00bcd4' }}>
+                      {(summary.totalExecutedSqFt || 0).toLocaleString('en-IN')} <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>/ {(summary.totalScopeSqFt || 0).toLocaleString('en-IN')} Sq.Ft</span>
+                    </div>
+                    <div className="contract-progress-bar-mini">
+                      <div
+                        className="contract-progress-fill-mini"
+                        style={{
+                          width: `${Math.min(summary.totalScopeSqFt > 0 ? (summary.totalExecutedSqFt / summary.totalScopeSqFt) * 100 : 0, 100)}%`,
+                          background: '#00bcd4'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="contract-tally-card">
+                    <div className="card-top">
+                      <span className="card-title">Work Value Earned</span>
+                      <div className="card-icon-mini" style={{ background: 'rgba(156, 39, 176, 0.15)', color: '#ba68c8' }}>
+                        <TrendingUp size={15} />
+                      </div>
+                    </div>
+                    <div className="card-metric" style={{ color: '#ba68c8' }}>
+                      {fmt(summary.totalEarned)}
+                    </div>
+                    <div className="card-subtext">From verified measurements</div>
+                  </div>
+
+                  <div className="contract-tally-card">
+                    <div className="card-top">
+                      <span className="card-title">Total Paid</span>
+                      <div className="card-icon-mini" style={{ background: 'rgba(33, 150, 243, 0.15)', color: '#42a5f5' }}>
+                        <CheckCircle2 size={15} />
+                      </div>
+                    </div>
+                    <div className="card-metric" style={{ color: '#42a5f5' }}>
+                      {fmt(summary.totalPaid)}
+                    </div>
+                    <div className="card-subtext">Vouchers & weekly pay sheets</div>
+                  </div>
+
+                  <div className="contract-tally-card" style={{ borderColor: (summary.balancePayable || 0) > 0 ? 'rgba(234, 179, 8, 0.4)' : 'rgba(76, 175, 80, 0.4)' }}>
+                    <div className="card-top">
+                      <span className="card-title">Balance Payable</span>
+                      <div className="card-icon-mini" style={{
+                        background: (summary.balancePayable || 0) > 0 ? 'rgba(234, 179, 8, 0.15)' : 'rgba(76, 175, 80, 0.15)',
+                        color: (summary.balancePayable || 0) > 0 ? '#eab308' : '#4caf50'
+                      }}>
+                        <Clock size={15} />
+                      </div>
+                    </div>
+                    <div className="card-metric" style={{ color: (summary.balancePayable || 0) > 0 ? '#eab308' : '#4caf50' }}>
+                      {fmt(summary.balancePayable)}
+                    </div>
+                    <div className="card-subtext">
+                      {(summary.balancePayable || 0) > 0 ? 'Due to contractors' : 'All accounts settled'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Quick helper banner */}
+            <div style={{
+              background: 'rgba(234, 179, 8, 0.05)',
+              border: '1px solid rgba(234, 179, 8, 0.25)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '20px',
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.5
+            }}>
+              <strong style={{ color: '#eab308' }}>Measurement & Labour Payment Tally: </strong>
+              Each contractor's agreed scope (Sq.Ft) and rate are pre-bound. Whenever daily attendance measurements are recorded in the <strong>Attendance Sheet / Measurement Book</strong>, the work value earned is automatically calculated. Payments made through weekly pay sheets or payment vouchers are tallies in real-time, showing the remaining balance payable.
+            </div>
+
+            {/* Add Contractor Form Card */}
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                  Add / Assign Contractor to this Site
+                </h4>
+                {parseFloat(contractInput.totalSqFt) > 0 && parseFloat(contractInput.ratePerSqFt) > 0 && (
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    background: 'rgba(234, 179, 8, 0.15)',
+                    color: '#eab308',
+                    border: '1px solid rgba(234, 179, 8, 0.3)'
+                  }}>
+                    Est. Contract Value: ₹{(parseFloat(contractInput.totalSqFt) * parseFloat(contractInput.ratePerSqFt)).toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 120px 120px auto', gap: '12px', alignItems: 'end' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Select Person / Contractor *</label>
+                  <select
+                    value={contractInput.payeeId}
+                    onChange={(e) => {
+                      const selected = allPayees.find(p => String(p.id) === e.target.value);
+                      setContractInput({
+                        ...contractInput,
+                        payeeId: e.target.value,
+                        role: selected?.Type || ''
+                      });
+                    }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: 'var(--bg-input, var(--bg-primary))', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '13px' }}
+                  >
+                    <option value="">-- Choose Person --</option>
+                    {allPayees.map(p => (
+                      <option key={p.id} value={p.id}>{p.Name} ({p.Type || 'Payee'})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Work Role / Trade</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Centering, Masonry"
+                    value={contractInput.role}
+                    onChange={(e) => setContractInput({ ...contractInput, role: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: 'var(--bg-input, var(--bg-primary))', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Scope (Sq.Ft)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    placeholder="e.g. 2500"
+                    value={contractInput.totalSqFt}
+                    onChange={(e) => setContractInput({ ...contractInput, totalSqFt: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: 'var(--bg-input, var(--bg-primary))', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Rate (₹/SqFt) *</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="35"
+                    value={contractInput.ratePerSqFt}
+                    onChange={(e) => setContractInput({ ...contractInput, ratePerSqFt: e.target.value })}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: 'var(--bg-input, var(--bg-primary))', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleAddContractRate}
+                    disabled={savingContract}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '8px',
+                      backgroundColor: '#eab308',
+                      color: '#000',
+                      fontWeight: 'bold',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '13px',
+                      height: '42px',
+                      opacity: savingContract ? 0.7 : 1
+                    }}
+                  >
+                    {savingContract ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />} Add Contractor
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* List of Configured Contractors with Measurement & Payment Tally */}
+            {Array.isArray(site.ContractRates) && site.ContractRates.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="site-detail-table">
+                  <thead>
+                    <tr>
+                      <th>Contractor / Person</th>
+                      <th>Scope (Sq.Ft)</th>
+                      <th>Executed (Sq.Ft)</th>
+                      <th>Balance Sq.Ft</th>
+                      <th>Rate & Contract Budget</th>
+                      <th>Work Value Earned</th>
+                      <th>Total Paid</th>
+                      <th>Balance Payable</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {site.ContractRates.map((cr, idx) => {
+                      const scope = parseFloat(cr.totalSqFt || 0);
+                      const executed = parseFloat(cr.completedSqFt || 0);
+                      const balanceSqFt = parseFloat(cr.balanceSqFt || (scope - executed));
+                      const progressPct = parseFloat(cr.progressPct || (scope > 0 ? Math.round((executed / scope) * 100) : 0));
+                      const isOverrun = scope > 0 && executed > scope;
+                      const earned = parseFloat(cr.workValueEarned || 0);
+                      const paid = parseFloat(cr.totalPaid || 0);
+                      const payable = parseFloat(cr.balancePayable || Math.max(0, earned - paid));
+
+                      return (
+                        <tr key={idx}>
+                          {/* Contractor Info */}
+                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                color: '#eab308',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 'bold',
+                                fontSize: '13px',
+                                flexShrink: 0
+                              }}>
+                                {cr.payeeName?.charAt(0) || 'C'}
+                              </div>
+                              <div>
+                                <div>{cr.payeeName}</div>
+                                <span className="site-meta-badge" style={{ background: 'rgba(255, 255, 255, 0.06)', color: 'var(--text-secondary)', fontSize: '10px', padding: '1px 6px' }}>
+                                  {cr.role || 'Contractor'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Target Scope */}
+                          <td>
+                            {scope > 0 ? (
+                              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {scope.toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sq.Ft</span>
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Open / Uncapped</span>
+                            )}
+                          </td>
+
+                          {/* Executed Sq.Ft + Progress Bar */}
+                          <td style={{ minWidth: '150px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                              <span style={{ fontWeight: 700, color: isOverrun ? '#ff5252' : '#00bcd4' }}>
+                                {executed.toLocaleString('en-IN')} Sq.Ft
+                              </span>
+                              {scope > 0 && (
+                                <span style={{ fontSize: '11px', fontWeight: 600, color: isOverrun ? '#ff5252' : 'var(--text-secondary)' }}>
+                                  {progressPct}%
+                                </span>
+                              )}
+                            </div>
+                            {scope > 0 && (
+                              <div className="contract-progress-bar-mini">
+                                <div
+                                  className="contract-progress-fill-mini"
+                                  style={{
+                                    width: `${Math.min(progressPct, 100)}%`,
+                                    background: isOverrun ? '#ff5252' : '#00bcd4'
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {isOverrun && (
+                              <div className="contract-badge-overrun">
+                                ⚠ Overrun: +{(executed - scope).toLocaleString('en-IN')} Sq.Ft
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Balance Scope */}
+                          <td>
+                            {scope > 0 ? (
+                              balanceSqFt <= 0 ? (
+                                <span style={{ color: '#4caf50', fontWeight: 700, fontSize: '12px' }}>✓ Completed</span>
+                              ) : (
+                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                  {balanceSqFt.toLocaleString('en-IN')} Sq.Ft
+                                </span>
+                              )
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Rate & Total Contract Value */}
+                          <td>
+                            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#eab308' }}>
+                              ₹{parseFloat(cr.ratePerSqFt || 0).toLocaleString('en-IN')} <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 'normal' }}>/ Sq.Ft</span>
+                            </div>
+                            {scope > 0 && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                Value: ₹{parseFloat(cr.totalAmount || (scope * cr.ratePerSqFt) || 0).toLocaleString('en-IN')}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Work Value Earned */}
+                          <td>
+                            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#ba68c8' }}>
+                              ₹{earned.toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>from measurements</div>
+                          </td>
+
+                          {/* Total Paid */}
+                          <td>
+                            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#42a5f5' }}>
+                              ₹{paid.toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>to date</div>
+                          </td>
+
+                          {/* Balance Payable */}
+                          <td>
+                            {payable > 0 ? (
+                              <span className="contract-badge-payable">
+                                ₹{payable.toLocaleString('en-IN')}
+                              </span>
+                            ) : (
+                              <span className="contract-badge-settled">
+                                ✓ Settled
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Action */}
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveContractRate(cr.payeeId)}
+                              disabled={savingContract}
+                              style={{
+                                background: 'none',
+                                border: '1px solid rgba(244, 67, 54, 0.3)',
+                                borderRadius: '6px',
+                                color: 'var(--error)',
+                                padding: '6px 10px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '12px'
+                              }}
+                            >
+                              <Trash2 size={13} /> Remove
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="site-payment-empty">
+                No contractors configured for contract basis on this site yet. Select a person, their target Sq.Ft scope, and their rate above to configure.
               </div>
             )}
           </div>

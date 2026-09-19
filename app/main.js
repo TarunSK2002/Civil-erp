@@ -1,10 +1,15 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
 const isDev = !app.isPackaged;
 
 let backendProcess = null;
+
+// Register IPC handlers
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+});
 
 
 function startBackend() {
@@ -64,6 +69,7 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: false,
             preload: path.join(__dirname, 'preload.js')
         },
         backgroundColor: '#1A1A2E',

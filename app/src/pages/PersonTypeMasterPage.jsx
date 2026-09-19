@@ -241,6 +241,7 @@ const PersonTypeMasterPage = () => {
                         >
                           <option value="Day">Day</option>
                           <option value="Hour">Hour</option>
+                          <option value="SqFt">Sq.Ft (Contract)</option>
                         </select>
                       </div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -292,7 +293,7 @@ const PersonTypeMasterPage = () => {
                           display: 'flex', alignItems: 'center', gap: 2
                         }}>
                           <IndianRupee size={11} />
-                          {parseFloat(type.DailyRate || 0).toLocaleString('en-IN')}/{type.RateUnit === 'Hour' ? 'hour' : 'day'}
+                          {parseFloat(type.DailyRate || 0).toLocaleString('en-IN')}/{type.RateUnit === 'Hour' ? 'hr' : (type.RateUnit === 'SqFt' ? 'sq.ft' : 'day')}
                         </div>
                       </div>
                     </>
@@ -418,6 +419,7 @@ const PersonTypeMasterPage = () => {
               >
                 <option value="Day">Day</option>
                 <option value="Hour">Hour</option>
+                <option value="SqFt">Sq.Ft (Contract)</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>

@@ -75,6 +75,14 @@ router.all('/', async (req, res) => {
                 Status: s.Status,
                 Progress: s.Progress,
                 NextMilestone: s.NextMilestone,
+                ConstructionType: s.ConstructionType || 'Normal',
+                ContractRates: (() => {
+                    if (!s.ContractRates) return [];
+                    if (typeof s.ContractRates === 'string') {
+                        try { return JSON.parse(s.ContractRates); } catch (e) { return []; }
+                    }
+                    return Array.isArray(s.ContractRates) ? s.ContractRates : [];
+                })(),
                 uuid: s.uuid,
                 is_deleted: !!s.is_deleted,
                 CreatedAt: s.CreatedAt,
@@ -140,8 +148,97 @@ router.get('/:id', async (req, res) => {
             limit: 20
         });
 
+        // Parse and enrich ContractRates with live measurement & labour payment tallying
+        const rawContractRates = (() => {
+            if (!plainSite.ContractRates) return [];
+            if (typeof plainSite.ContractRates === 'string') {
+                try { return JSON.parse(plainSite.ContractRates); } catch (e) { return []; }
+            }
+            return Array.isArray(plainSite.ContractRates) ? plainSite.ContractRates : [];
+        })();
+
+        const enrichedContractRates = await Promise.all(rawContractRates.map(async (cr) => {
+            const payeeId = cr.payeeId;
+            const ratePerSqFt = parseFloat(cr.ratePerSqFt || 0);
+            const totalSqFt = parseFloat(cr.totalSqFt || 0);
+            const contractValue = totalSqFt > 0 ? (totalSqFt * ratePerSqFt) : 0;
+
+            // 1. Measured SqFt & Earned Work Value from attendance_records
+            const [attStats] = await sequelize.query(`
+                SELECT 
+                    COALESCE(SUM(SqFt), 0) AS completedSqFt,
+                    COALESCE(SUM(CalculatedAmount), 0) AS workValueEarned,
+                    COUNT(*) AS entriesCount
+                FROM attendance_records 
+                WHERE SiteId = :siteId 
+                  AND PayeeId = :payeeId 
+                  AND is_deleted = 0
+            `, {
+                replacements: { siteId: site.id, payeeId },
+                type: sequelize.QueryTypes.SELECT
+            }).catch(() => ([{ completedSqFt: 0, workValueEarned: 0, entriesCount: 0 }]));
+
+            const completedSqFt = parseFloat(attStats?.completedSqFt || 0);
+            const workValueEarned = parseFloat(attStats?.workValueEarned || 0);
+            const balanceSqFt = totalSqFt > 0 ? (totalSqFt - completedSqFt) : 0;
+            const progressPct = totalSqFt > 0 ? Math.min(100, Math.max(0, (completedSqFt / totalSqFt) * 100)) : 0;
+
+            // 2. Payments made to this contractor for this site
+            const [payStats] = await sequelize.query(`
+                SELECT COALESCE(SUM(Amount), 0) AS directPaid
+                FROM payments 
+                WHERE SiteId = :siteId 
+                  AND (PayeeId = :payeeId OR LabourId = :payeeId) 
+                  AND is_deleted = 0
+            `, {
+                replacements: { siteId: site.id, payeeId },
+                type: sequelize.QueryTypes.SELECT
+            }).catch(() => ([{ directPaid: 0 }]));
+
+            const [sheetStats] = await sequelize.query(`
+                SELECT COALESCE(SUM(TotalNetPayable), 0) AS sheetPaid
+                FROM weekly_pay_sheet_items 
+                WHERE SiteId = :siteId 
+                  AND PayeeId = :payeeId 
+                  AND is_deleted = 0
+            `, {
+                replacements: { siteId: site.id, payeeId },
+                type: sequelize.QueryTypes.SELECT
+            }).catch(() => ([{ sheetPaid: 0 }]));
+
+            const totalPaid = Math.max(parseFloat(payStats?.directPaid || 0), parseFloat(sheetStats?.sheetPaid || 0));
+            const balancePayable = Math.max(0, workValueEarned - totalPaid);
+
+            return {
+                ...cr,
+                totalSqFt,
+                ratePerSqFt,
+                contractValue,
+                completedSqFt,
+                balanceSqFt,
+                progressPct: parseFloat(progressPct.toFixed(1)),
+                workValueEarned,
+                totalPaid,
+                balancePayable,
+                entriesCount: parseInt(attStats?.entriesCount || 0, 10),
+                isOverrun: totalSqFt > 0 && completedSqFt > totalSqFt
+            };
+        }));
+
+        const contractSummary = {
+            totalAllocatedSqFt: enrichedContractRates.reduce((sum, cr) => sum + (cr.totalSqFt || 0), 0),
+            totalCompletedSqFt: enrichedContractRates.reduce((sum, cr) => sum + (cr.completedSqFt || 0), 0),
+            totalContractBudget: enrichedContractRates.reduce((sum, cr) => sum + (cr.contractValue || 0), 0),
+            totalWorkValueEarned: enrichedContractRates.reduce((sum, cr) => sum + (cr.workValueEarned || 0), 0),
+            totalPaidAmount: enrichedContractRates.reduce((sum, cr) => sum + (cr.totalPaid || 0), 0),
+            totalBalancePayable: enrichedContractRates.reduce((sum, cr) => sum + (cr.balancePayable || 0), 0)
+        };
+
         res.json({
             ...plainSite,
+            ConstructionType: plainSite.ConstructionType || 'Normal',
+            ContractRates: enrichedContractRates,
+            ContractSummary: contractSummary,
             ReceivedAmount: receivedAmount,
             BalanceAmount: siteValue - receivedAmount,
             ActiveLabourCount: activeLabourCount,
@@ -157,8 +254,9 @@ router.get('/:id', async (req, res) => {
 // @route   POST api/sites
 // @desc    Create a site
 router.post('/', async (req, res) => {
-    const { SiteName, ClientId, SiteValue, Length, Breadth, Facing, Status, Progress, NextMilestone } = req.body;
+    const { SiteName, ClientId, SiteValue, Length, Breadth, Facing, Status, Progress, NextMilestone, ConstructionType, ContractRates } = req.body;
     try {
+        const ratesJson = ContractRates ? (typeof ContractRates === 'string' ? ContractRates : JSON.stringify(ContractRates)) : '[]';
         const newSite = await Site.create({
             SiteName,
             ClientId,
@@ -168,7 +266,9 @@ router.post('/', async (req, res) => {
             Facing,
             Status: Status || 'Upcoming',
             Progress: Progress || 0,
-            NextMilestone: NextMilestone || ''
+            NextMilestone: NextMilestone || '',
+            ConstructionType: ConstructionType || 'Normal',
+            ContractRates: ratesJson
         });
         res.json(newSite);
     } catch (err) {
@@ -180,12 +280,12 @@ router.post('/', async (req, res) => {
 // @route   PUT api/sites/:id
 // @desc    Update a site
 router.put('/:id', async (req, res) => {
-    const { SiteName, ClientId, SiteValue, Length, Breadth, Facing, Status, Progress, NextMilestone } = req.body;
+    const { SiteName, ClientId, SiteValue, Length, Breadth, Facing, Status, Progress, NextMilestone, ConstructionType, ContractRates } = req.body;
     try {
         let site = await Site.findByPk(req.params.id);
         if (!site) return res.status(404).json({ msg: 'Site not found' });
 
-        site = await site.update({
+        const updateData = {
             SiteName,
             ClientId,
             SiteValue,
@@ -195,8 +295,126 @@ router.put('/:id', async (req, res) => {
             Status,
             Progress,
             NextMilestone
-        });
+        };
+        if (ConstructionType !== undefined) {
+            updateData.ConstructionType = ConstructionType;
+        }
+        if (ContractRates !== undefined) {
+            updateData.ContractRates = typeof ContractRates === 'string' ? ContractRates : JSON.stringify(ContractRates);
+        }
+
+        site = await site.update(updateData);
         res.json(site);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   PATCH api/sites/:id/contract-rates
+// @desc    Update site contract rates and construction type
+router.patch('/:id/contract-rates', async (req, res) => {
+    const { ConstructionType, ContractRates } = req.body;
+    try {
+        let site = await Site.findByPk(req.params.id);
+        if (!site) return res.status(404).json({ msg: 'Site not found' });
+
+        const updateData = {};
+        if (ConstructionType !== undefined) updateData.ConstructionType = ConstructionType;
+        if (ContractRates !== undefined) {
+            updateData.ContractRates = typeof ContractRates === 'string' ? ContractRates : JSON.stringify(ContractRates);
+        }
+
+        site = await site.update(updateData);
+        res.json(site);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   GET api/sites/contract-tally/:siteId/:payeeId
+// @desc    Get live measurement & payment tally for a single contractor on a site
+router.get('/contract-tally/:siteId/:payeeId', async (req, res) => {
+    const { siteId, payeeId } = req.params;
+    try {
+        const site = await Site.findByPk(siteId);
+        if (!site) return res.status(404).json({ msg: 'Site not found' });
+
+        const rawContractRates = (() => {
+            if (!site.ContractRates) return [];
+            if (typeof site.ContractRates === 'string') {
+                try { return JSON.parse(site.ContractRates); } catch (e) { return []; }
+            }
+            return Array.isArray(site.ContractRates) ? site.ContractRates : [];
+        })();
+
+        const matchedRate = rawContractRates.find(cr => String(cr.payeeId) === String(payeeId));
+
+        const ratePerSqFt = parseFloat(matchedRate?.ratePerSqFt || 0);
+        const totalSqFt = parseFloat(matchedRate?.totalSqFt || 0);
+        const contractValue = totalSqFt > 0 ? (totalSqFt * ratePerSqFt) : 0;
+
+        const [attStats] = await sequelize.query(`
+            SELECT 
+                COALESCE(SUM(SqFt), 0) AS completedSqFt,
+                COALESCE(SUM(CalculatedAmount), 0) AS workValueEarned,
+                COUNT(*) AS entriesCount
+            FROM attendance_records 
+            WHERE SiteId = :siteId 
+              AND PayeeId = :payeeId 
+              AND is_deleted = 0
+        `, {
+            replacements: { siteId, payeeId },
+            type: sequelize.QueryTypes.SELECT
+        }).catch(() => ([{ completedSqFt: 0, workValueEarned: 0, entriesCount: 0 }]));
+
+        const completedSqFt = parseFloat(attStats?.completedSqFt || 0);
+        const workValueEarned = parseFloat(attStats?.workValueEarned || 0);
+        const balanceSqFt = totalSqFt > 0 ? (totalSqFt - completedSqFt) : 0;
+        const progressPct = totalSqFt > 0 ? Math.min(100, Math.max(0, (completedSqFt / totalSqFt) * 100)) : 0;
+
+        const [payStats] = await sequelize.query(`
+            SELECT COALESCE(SUM(Amount), 0) AS directPaid
+            FROM payments 
+            WHERE SiteId = :siteId 
+              AND (PayeeId = :payeeId OR LabourId = :payeeId) 
+              AND is_deleted = 0
+        `, {
+            replacements: { siteId, payeeId },
+            type: sequelize.QueryTypes.SELECT
+        }).catch(() => ([{ directPaid: 0 }]));
+
+        const [sheetStats] = await sequelize.query(`
+            SELECT COALESCE(SUM(TotalNetPayable), 0) AS sheetPaid
+            FROM weekly_pay_sheet_items 
+            WHERE SiteId = :siteId 
+              AND PayeeId = :payeeId 
+              AND is_deleted = 0
+        `, {
+            replacements: { siteId, payeeId },
+            type: sequelize.QueryTypes.SELECT
+        }).catch(() => ([{ sheetPaid: 0 }]));
+
+        const totalPaid = Math.max(parseFloat(payStats?.directPaid || 0), parseFloat(sheetStats?.sheetPaid || 0));
+        const balancePayable = Math.max(0, workValueEarned - totalPaid);
+
+        res.json({
+            siteId: parseInt(siteId),
+            payeeId: parseInt(payeeId),
+            role: matchedRate?.role || 'Contractor',
+            totalSqFt,
+            ratePerSqFt,
+            contractValue,
+            completedSqFt,
+            balanceSqFt,
+            progressPct: parseFloat(progressPct.toFixed(1)),
+            workValueEarned,
+            totalPaid,
+            balancePayable,
+            entriesCount: parseInt(attStats?.entriesCount || 0, 10),
+            isOverrun: totalSqFt > 0 && completedSqFt > totalSqFt
+        });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

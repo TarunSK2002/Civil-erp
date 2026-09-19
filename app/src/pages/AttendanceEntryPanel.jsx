@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, X, Building2, UserCheck, Clock, IndianRupee, HardHat, Coffee, TrendingUp, Package } from 'lucide-react';
+import { Plus, Trash2, X, Building2, UserCheck, Clock, IndianRupee, HardHat, Coffee, TrendingUp, Package, Zap } from 'lucide-react';
 import api from '../api/axios';
 
 const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, date, records, shiftTypes, masterSettings = { TeaExpense: '20', BusExpense: '50' }, weeklySiteAttendance = 0, weeklySiteLabourCount = 0, onClose, onSaved }) => {
@@ -14,8 +14,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
   const [siteSections, setSiteSections] = useState([]);
   const [sqFtEntry, setSqFtEntry] = useState({
     sectionId: '',
+    workDescription: '',
     length: '',
     breadth: '',
+    deductionSqFt: '',
     ratePerSqFt: '',
     labourCount: 1
   });
@@ -30,19 +32,59 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
     if (newShift.personType) {
       const selectedPt = personTypes.find(pt => pt.Name === newShift.personType);
       if (selectedPt) {
-        setHourEntry(prev => ({
-          ...prev,
-          ratePerHour: selectedPt.RateUnit === 'Hour' ? String(selectedPt.DailyRate) : ''
-        }));
+        if (selectedPt.RateUnit === 'Hour') {
+          setHourEntry(prev => ({
+            ...prev,
+            ratePerHour: String(selectedPt.DailyRate || '')
+          }));
+          setCalcMode('Hour');
+        } else if (selectedPt.RateUnit === 'SqFt') {
+          setSqFtEntry(prev => ({
+            ...prev,
+            ratePerSqFt: String(selectedPt.DailyRate || '')
+          }));
+          setCalcMode('SqFt');
+        }
       }
     }
   }, [newShift.personType, personTypes]);
 
+  const [siteDetails, setSiteDetails] = useState(null);
+  const [matchedContractRate, setMatchedContractRate] = useState(null);
+
   useEffect(() => {
     if (siteId) {
       fetchSiteSections();
+      fetchSiteContractInfo();
     }
-  }, [siteId]);
+  }, [siteId, payeeId]);
+
+  const fetchSiteContractInfo = async () => {
+    try {
+      const res = await api.get(`/sites/${siteId}`);
+      setSiteDetails(res.data);
+      if (res.data?.ConstructionType === 'Contract') {
+        const rates = Array.isArray(res.data.ContractRates) ? res.data.ContractRates : [];
+        const matched = rates.find(cr => String(cr.payeeId) === String(payeeId));
+        if (matched) {
+          setMatchedContractRate(matched);
+          setCalcMode('SqFt');
+          setSqFtEntry(prev => ({
+            ...prev,
+            ratePerSqFt: String(matched.ratePerSqFt || '')
+          }));
+        } else {
+          // If contract site but contractor not explicitly in list, default to SqFt mode anyway
+          setMatchedContractRate(null);
+          setCalcMode('SqFt');
+        }
+      } else {
+        setMatchedContractRate(null);
+      }
+    } catch (e) {
+      console.error('Failed to fetch site contract info', e);
+    }
+  };
 
   const fetchSiteSections = async () => {
     try {
@@ -331,14 +373,17 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
           PersonType: newShift.personType,
           CalculationMode: 'SqFt',
           SectionId: parseInt(sqFtEntry.sectionId),
+          WorkDescription: sqFtEntry.workDescription || null,
           Length: sqFtEntry.length ? parseFloat(sqFtEntry.length) : null,
           Breadth: sqFtEntry.breadth ? parseFloat(sqFtEntry.breadth) : null,
+          DeductionSqFt: sqFtEntry.deductionSqFt ? parseFloat(sqFtEntry.deductionSqFt) : 0,
           RatePerSqFt: parseFloat(sqFtEntry.ratePerSqFt),
           LabourCount: parseInt(sqFtEntry.labourCount || 1)
         });
-        setSqFtEntry({ sectionId: '', length: '', breadth: '', ratePerSqFt: '', labourCount: 1 });
+        setSqFtEntry({ sectionId: '', workDescription: '', length: '', breadth: '', deductionSqFt: '', ratePerSqFt: '', labourCount: 1 });
       }
       onSaved();
+      fetchSiteContractInfo();
     } catch (err) { alert(err.response?.data?.msg || 'Failed'); }
     finally { setSaving(false); }
   };
@@ -347,6 +392,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
     try {
       await api.delete(`/attendance-sheets/${sheetId}/records/${recordId}`);
       onSaved();
+      fetchSiteContractInfo();
     } catch (err) { alert(err.response?.data?.msg || 'Failed'); }
   };
 
@@ -444,7 +490,8 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                   <span className="shift-person-type">{rec.personType || 'Mason'}</span>
                   {rec.calculationMode === 'SqFt' ? (
                     <span className="shift-label" style={{ color: '#9C27B0', fontSize: '11px', fontWeight: 600 }}>
-                      {floorName}: {rec.length && rec.breadth ? `${rec.length}×${rec.breadth} ft` : `${rec.sqFt || 0} SqFt`} @ ₹{rec.ratePerSqFt}
+                      {floorName}{rec.workDescription ? ` (${rec.workDescription})` : ''}: {rec.length && rec.breadth ? `${rec.length}×${rec.breadth}` : ''}
+                      {rec.deductionSqFt > 0 ? ` - ${rec.deductionSqFt}` : ''} = {rec.sqFt || 0} SqFt @ ₹{rec.ratePerSqFt}
                     </span>
                   ) : rec.calculationMode === 'Hour' ? (
                     <span className="shift-label" style={{ color: '#FF9800', fontSize: '11px', fontWeight: 600 }}>
@@ -460,6 +507,92 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
               );
             })}
           </div>
+
+          {/* Contract Site Banner */}
+          {siteDetails?.ConstructionType === 'Contract' && (
+            <div style={{
+              backgroundColor: 'rgba(234, 179, 8, 0.08)',
+              border: '1px solid rgba(234, 179, 8, 0.35)',
+              borderRadius: '10px',
+              padding: '12px 14px',
+              marginBottom: '14px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: matchedContractRate ? '8px' : '0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Zap size={16} color="#eab308" />
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#eab308' }}>
+                      Contract Basis Site: {siteName}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      {matchedContractRate ? (
+                        <>Contractor: <strong style={{ color: '#fff' }}>{payeeName}</strong> ({matchedContractRate.role || 'Contractor'})</>
+                      ) : (
+                        <>This site is configured for contract basis (piece-rate Sq.Ft measurement).</>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {matchedContractRate && (
+                  <span style={{
+                    backgroundColor: '#eab308',
+                    color: '#000',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '800'
+                  }}>
+                    ₹{matchedContractRate.ratePerSqFt} / SqFt
+                  </span>
+                )}
+              </div>
+
+              {matchedContractRate && (
+                <div style={{
+                  borderTop: '1px dashed rgba(234, 179, 8, 0.2)',
+                  paddingTop: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  {/* Scope & Progress */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Scope Progress: <strong style={{ color: 'var(--text-primary)' }}>{(matchedContractRate.completedSqFt || 0).toLocaleString('en-IN')}</strong> / {parseFloat(matchedContractRate.totalSqFt) > 0 ? `${parseFloat(matchedContractRate.totalSqFt).toLocaleString('en-IN')} Sq.Ft` : 'Open'}
+                    </span>
+                    {parseFloat(matchedContractRate.totalSqFt) > 0 && (
+                      <span style={{
+                        fontWeight: 700,
+                        color: matchedContractRate.completedSqFt > matchedContractRate.totalSqFt ? '#ff5252' : '#eab308'
+                      }}>
+                        {matchedContractRate.progressPct || 0}% {matchedContractRate.completedSqFt > matchedContractRate.totalSqFt ? '(Overrun)' : ''}
+                      </span>
+                    )}
+                  </div>
+
+                  {parseFloat(matchedContractRate.totalSqFt) > 0 && (
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${Math.min(matchedContractRate.progressPct || 0, 100)}%`,
+                          background: matchedContractRate.completedSqFt > matchedContractRate.totalSqFt ? '#ff5252' : '#eab308',
+                          borderRadius: '2px'
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Payment Tally */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    <span>Earned: <strong style={{ color: '#ba68c8' }}>₹{(matchedContractRate.workValueEarned || 0).toLocaleString('en-IN')}</strong></span>
+                    <span>Paid: <strong style={{ color: '#42a5f5' }}>₹{(matchedContractRate.totalPaid || 0).toLocaleString('en-IN')}</strong></span>
+                    <span>Bal Payable: <strong style={{ color: (matchedContractRate.balancePayable || 0) > 0 ? '#eab308' : '#4caf50' }}>₹{(matchedContractRate.balancePayable || 0).toLocaleString('en-IN')}</strong></span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Mode Switcher */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 14, background: 'rgba(255,255,255,0.02)', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
@@ -549,7 +682,7 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                 </div>
 
                 <div className="field" style={{ gridColumn: 'span 2' }}>
-                  <label>Floor / Section (Option C)</label>
+                  <label>Floor / Section</label>
                   <select
                     value={sqFtEntry.sectionId}
                     onChange={e => {
@@ -558,20 +691,30 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                       setSqFtEntry({
                         ...sqFtEntry,
                         sectionId: secId,
-                        ratePerSqFt: sec && sec.RatePerSqFt ? String(sec.RatePerSqFt) : ''
+                        ratePerSqFt: sec && sec.RatePerSqFt ? String(sec.RatePerSqFt) : sqFtEntry.ratePerSqFt
                       });
                     }}
                   >
                     <option value="">Select Floor/Section...</option>
                     {siteSections.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.Name} {s.RatePerSqFt ? `(Rate: ₹${s.RatePerSqFt})` : '(No Rate set)'}
+                        {s.Name} {s.RatePerSqFt ? `(Rate: ₹${s.RatePerSqFt})` : ''}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="field" style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div className="field" style={{ gridColumn: 'span 2' }}>
+                  <label>Work Description / Room Location</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Hall Slab, Room 1 Plastering, Portico Beams"
+                    value={sqFtEntry.workDescription}
+                    onChange={e => setSqFtEntry({ ...sqFtEntry, workDescription: e.target.value })}
+                  />
+                </div>
+
+                <div className="field" style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
                   <div>
                     <label style={{ fontSize: 9, marginBottom: "6px" }}>Length (ft)</label>
                     <input type="number" step="0.01" placeholder="L" value={sqFtEntry.length} onChange={e => setSqFtEntry({ ...sqFtEntry, length: e.target.value })} />
@@ -579,6 +722,10 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                   <div>
                     <label style={{ fontSize: 9, marginBottom: "6px" }}>Breadth (ft)</label>
                     <input type="number" step="0.01" placeholder="B" value={sqFtEntry.breadth} onChange={e => setSqFtEntry({ ...sqFtEntry, breadth: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 9, marginBottom: "6px" }}>Deduction (SqFt)</label>
+                    <input type="number" step="0.01" placeholder="Cutout" value={sqFtEntry.deductionSqFt} onChange={e => setSqFtEntry({ ...sqFtEntry, deductionSqFt: e.target.value })} />
                   </div>
                   <div>
                     <label style={{ fontSize: 9, marginBottom: "6px" }}>Rate / SqFt</label>
@@ -592,24 +739,36 @@ const AttendanceEntryPanel = ({ sheetId, payeeId, siteId, payeeName, siteName, d
                   disabled={saving}
                   style={{ gridColumn: 'span 2', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}
                 >
-                  <Plus size={14} /> Add Sq-Ft Work
+                  <Plus size={14} /> Add MB Measurement Record
                 </button>
               </div>
 
               {sqFtEntry.ratePerSqFt && (
-                <div style={{ padding: '6px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(156,39,176,0.08)', border: '1px solid rgba(156,39,176,0.15)', fontSize: 11, color: '#BA68C8', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>
-                    Estimate: {sqFtEntry.length && sqFtEntry.breadth ? `${sqFtEntry.length}×${sqFtEntry.breadth} = ` : ''}
-                    {sqFtEntry.length && sqFtEntry.breadth ? (parseFloat(sqFtEntry.length) * parseFloat(sqFtEntry.breadth)).toFixed(2) : '1'} SqFt × ₹{sqFtEntry.ratePerSqFt} × {sqFtEntry.labourCount || 1}
-                  </span>
-                  <span style={{ fontWeight: 700 }}>
-                    {(() => {
-                      const area = sqFtEntry.length && sqFtEntry.breadth ? (parseFloat(sqFtEntry.length) * parseFloat(sqFtEntry.breadth)) : 1;
-                      const rate = parseFloat(sqFtEntry.ratePerSqFt || 0);
-                      const count = parseInt(sqFtEntry.labourCount || 1);
-                      return fmt(area * rate * count);
-                    })()}
-                  </span>
+                <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 8, background: 'rgba(156,39,176,0.08)', border: '1px solid rgba(156,39,176,0.2)', fontSize: 11, color: '#CE93D8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>
+                      {(() => {
+                        const len = parseFloat(sqFtEntry.length || 0);
+                        const brd = parseFloat(sqFtEntry.breadth || 0);
+                        const gross = len > 0 && brd > 0 ? (len * brd) : 0;
+                        const ded = parseFloat(sqFtEntry.deductionSqFt || 0);
+                        const net = Math.max(0, gross - ded);
+                        return `Gross: ${gross > 0 ? gross.toFixed(2) : '0'} SqFt ${ded > 0 ? `- Ded: ${ded.toFixed(2)} SqFt` : ''} = Net: ${net > 0 ? net.toFixed(2) : '0'} SqFt`;
+                      })()}
+                    </span>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: '#E1BEE7' }}>
+                      {(() => {
+                        const len = parseFloat(sqFtEntry.length || 0);
+                        const brd = parseFloat(sqFtEntry.breadth || 0);
+                        const gross = len > 0 && brd > 0 ? (len * brd) : 1;
+                        const ded = parseFloat(sqFtEntry.deductionSqFt || 0);
+                        const net = Math.max(0, gross - ded);
+                        const rate = parseFloat(sqFtEntry.ratePerSqFt || 0);
+                        const count = parseInt(sqFtEntry.labourCount || 1);
+                        return fmt(net * rate * count);
+                      })()}
+                    </span>
+                  </div>
                 </div>
               )}
             </>

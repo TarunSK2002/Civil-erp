@@ -338,6 +338,10 @@ router.get('/:id', async (req, res) => {
             grid[key] = {
                 id: item.id,
                 amount: parseFloat(item.Amount || 0),
+                grossAmount: parseFloat(item.GrossAmount || item.Amount || 0),
+                advanceAmount: parseFloat(item.AdvanceAmount || 0),
+                retentionPercent: parseFloat(item.RetentionPercent || 0),
+                retentionAmount: parseFloat(item.RetentionAmount || 0),
                 status: item.PaymentStatus,
                 paymentId: item.PaymentId,
                 paymentDate: item.PaymentDate,
@@ -1246,23 +1250,44 @@ router.post('/:id/import-attendance', async (req, res) => {
             const payeeId = parseInt(pIdStr);
             const siteId = sIdStr === 'null' ? null : parseInt(sIdStr);
 
+            // Determine if payee or records represent Contract basis
+            const payeeObj = await Payee.findByPk(payeeId);
+            const hasSqFtRecords = records.some(r => r.PayeeId === payeeId && r.SiteId === siteId && r.CalculationMode === 'SqFt');
+            const isContract = hasSqFtRecords || (payeeObj && (payeeObj.Type === 'Contractor' || (payeeObj.Name && payeeObj.Name.toLowerCase().includes('contract'))));
+
             let item = await WeeklyPaySheetItem.findOne({
                 where: { WeeklyPaySheetId: weeklySheet.id, PayeeId: payeeId, SiteId: siteId }
             });
 
+            const gross = parseFloat(amount || 0);
+
             if (item) {
                 // Only update if not paid
                 if (item.PaymentStatus !== 'Paid') {
-                    await item.update({ Amount: amount });
+                    const retPercent = parseFloat(item.RetentionPercent || 0);
+                    const advAmt = parseFloat(item.AdvanceAmount || 0);
+                    const retAmt = (gross * retPercent) / 100;
+                    const netAmt = Math.max(0, gross - advAmt - retAmt);
+
+                    await item.update({
+                        GrossAmount: gross,
+                        RetentionAmount: retAmt,
+                        Amount: isContract && (retPercent > 0 || advAmt > 0) ? netAmt : gross,
+                        SourceType: isContract ? 'Contract' : (item.SourceType || 'Attendance')
+                    });
                     updatedCount++;
                 }
             } else {
-                // Now they are definitely in the lists (we added them above)
                 await WeeklyPaySheetItem.create({
                     WeeklyPaySheetId: weeklySheet.id,
                     PayeeId: payeeId,
                     SiteId: siteId,
-                    Amount: amount,
+                    Amount: gross,
+                    GrossAmount: gross,
+                    AdvanceAmount: 0,
+                    RetentionPercent: 0,
+                    RetentionAmount: 0,
+                    SourceType: isContract ? 'Contract' : 'Attendance',
                     PaymentStatus: 'Pending'
                 });
                 updatedCount++;
@@ -1286,6 +1311,199 @@ router.post('/:id/import-attendance', async (req, res) => {
     } catch (err) {
         console.error('Import Attendance Error:', err);
         res.status(500).json({ msg: 'Server Error' });
+    }
+});
+
+// @route   GET /api/weekly-pay-sheets/:id/contract-breakdown/:payeeId/:siteId
+// @desc    Get detailed Measurement Book (MB), Lifting, Advances, Retention for a contract cell
+router.get('/:id/contract-breakdown/:payeeId/:siteId', async (req, res) => {
+    try {
+        const weeklySheet = await WeeklyPaySheet.findByPk(req.params.id);
+        if (!weeklySheet) return res.status(404).json({ msg: 'Sheet not found' });
+
+        const payeeId = parseInt(req.params.payeeId);
+        const siteId = parseInt(req.params.siteId);
+
+        const payee = await Payee.findByPk(payeeId);
+        const site = await Site.findByPk(siteId);
+
+        // Find linked WeeklyPaySheetItem
+        const item = await WeeklyPaySheetItem.findOne({
+            where: { WeeklyPaySheetId: weeklySheet.id, PayeeId: payeeId, SiteId: siteId }
+        });
+
+        // Week date range
+        const weekEndDate = new Date(weeklySheet.WeekDate);
+        const weekStartDate = new Date(weekEndDate);
+        weekStartDate.setDate(weekEndDate.getDate() - 6);
+        const startDateStr = weekStartDate.toISOString().split('T')[0];
+        const endDateStr = weekEndDate.toISOString().split('T')[0];
+
+        // Fetch matching AttendanceRecords with Section info
+        const { SiteSection, LiftingRecord, AttendanceMisc } = require('../models');
+        const records = await AttendanceRecord.findAll({
+            where: {
+                PayeeId: payeeId,
+                SiteId: siteId,
+                AttendanceDate: { [Op.between]: [startDateStr, endDateStr] }
+            },
+            order: [['AttendanceDate', 'ASC'], ['id', 'ASC']]
+        });
+
+        // Fetch section names
+        const sectionIds = [...new Set(records.map(r => r.SectionId).filter(Boolean))];
+        const sections = sectionIds.length > 0 ? await SiteSection.findAll({ where: { id: { [Op.in]: sectionIds } } }) : [];
+        const sectionMap = {};
+        sections.forEach(s => { sectionMap[s.id] = s.SectionName; });
+
+        // Map records with MB details
+        const mbRecords = records.map(r => {
+            const len = r.Length ? parseFloat(r.Length) : null;
+            const brd = r.Breadth ? parseFloat(r.Breadth) : null;
+            const grossSqFt = (len && brd) ? (len * brd) : (r.SqFt ? parseFloat(r.SqFt) : null);
+            const deduction = r.DeductionSqFt ? parseFloat(r.DeductionSqFt) : 0;
+            const netSqFt = r.SqFt ? parseFloat(r.SqFt) : grossSqFt;
+
+            return {
+                id: r.id,
+                date: r.AttendanceDate,
+                personType: r.PersonType,
+                mode: r.CalculationMode,
+                sectionName: r.SectionId ? (sectionMap[r.SectionId] || `Section #${r.SectionId}`) : 'General',
+                workDescription: r.WorkDescription || '',
+                length: len,
+                breadth: brd,
+                grossSqFt: grossSqFt,
+                deductionSqFt: deduction,
+                netSqFt: netSqFt,
+                ratePerSqFt: r.RatePerSqFt ? parseFloat(r.RatePerSqFt) : null,
+                labourCount: r.LabourCount || 1,
+                shiftType: r.ShiftType,
+                calculatedAmount: parseFloat(r.CalculatedAmount || 0)
+            };
+        });
+
+        // Lifting records
+        const liftingRecords = await LiftingRecord.findAll({
+            where: {
+                PayeeId: payeeId,
+                SiteId: siteId,
+                LiftingDate: { [Op.between]: [startDateStr, endDateStr] }
+            },
+            order: [['LiftingDate', 'ASC']]
+        });
+
+        const formattedLifting = liftingRecords.map(l => ({
+            id: l.id,
+            date: l.LiftingDate,
+            materialType: l.MaterialType,
+            floor: l.Floor,
+            quantity: parseFloat(l.Quantity || 0),
+            rate: parseFloat(l.Rate || 0),
+            amount: parseFloat(l.Amount || 0)
+        }));
+
+        // Miscs
+        const miscs = await AttendanceMisc.findAll({
+            where: { PayeeId: payeeId, SiteId: siteId }
+        });
+        const formattedMiscs = miscs.map(m => ({
+            id: m.id,
+            name: m.MiscName,
+            amount: parseFloat(m.Amount || 0)
+        }));
+
+        const totalWorkAmount = mbRecords.reduce((s, r) => s + r.calculatedAmount, 0);
+        const totalLiftingAmount = formattedLifting.reduce((s, l) => s + l.amount, 0);
+        const totalMiscAmount = formattedMiscs.reduce((s, m) => s + m.amount, 0);
+        const grossTotal = totalWorkAmount + totalLiftingAmount + totalMiscAmount;
+
+        const advanceAmount = item ? parseFloat(item.AdvanceAmount || 0) : 0;
+        const retentionPercent = item ? parseFloat(item.RetentionPercent || 0) : 0;
+        const retentionAmount = (grossTotal * retentionPercent) / 100;
+        const netPayable = Math.max(0, grossTotal - advanceAmount - retentionAmount);
+
+        res.json({
+            payee: { id: payee?.id, name: payee?.Name, type: payee?.Type },
+            site: { id: site?.Id, name: site?.SiteName },
+            weekDate: weeklySheet.WeekDate,
+            item: item ? {
+                id: item.id,
+                amount: parseFloat(item.Amount || 0),
+                grossAmount: parseFloat(item.GrossAmount || grossTotal),
+                advanceAmount,
+                retentionPercent,
+                retentionAmount,
+                paymentStatus: item.PaymentStatus
+            } : null,
+            mbRecords,
+            liftingRecords: formattedLifting,
+            miscs: formattedMiscs,
+            summary: {
+                totalWorkAmount,
+                totalLiftingAmount,
+                totalMiscAmount,
+                grossTotal,
+                advanceAmount,
+                retentionPercent,
+                retentionAmount,
+                netPayable
+            }
+        });
+    } catch (err) {
+        console.error('Contract breakdown error:', err);
+        res.status(500).json({ msg: 'Server Error', error: err.message });
+    }
+});
+
+// @route   PUT /api/weekly-pay-sheets/:id/contract-deductions/:payeeId/:siteId
+// @desc    Update mid-week advances and retention for a contract cell
+router.put('/:id/contract-deductions/:payeeId/:siteId', async (req, res) => {
+    try {
+        const { advanceAmount, retentionPercent } = req.body;
+        const weeklySheet = await WeeklyPaySheet.findByPk(req.params.id);
+        if (!weeklySheet) return res.status(404).json({ msg: 'Sheet not found' });
+
+        const payeeId = parseInt(req.params.payeeId);
+        const siteId = parseInt(req.params.siteId);
+
+        let item = await WeeklyPaySheetItem.findOne({
+            where: { WeeklyPaySheetId: weeklySheet.id, PayeeId: payeeId, SiteId: siteId }
+        });
+
+        if (!item) {
+            return res.status(404).json({ msg: 'Pay sheet item not found' });
+        }
+
+        const gross = parseFloat(item.GrossAmount || item.Amount || 0);
+        const advAmt = parseFloat(advanceAmount || 0);
+        const retPct = parseFloat(retentionPercent || 0);
+        const retAmt = (gross * retPct) / 100;
+        const netAmt = Math.max(0, gross - advAmt - retAmt);
+
+        await item.update({
+            GrossAmount: gross,
+            AdvanceAmount: advAmt,
+            RetentionPercent: retPct,
+            RetentionAmount: retAmt,
+            Amount: netAmt,
+            SourceType: 'Contract'
+        });
+
+        res.json({
+            msg: 'Contract deductions updated',
+            item: {
+                id: item.id,
+                grossAmount: gross,
+                advanceAmount: advAmt,
+                retentionPercent: retPct,
+                retentionAmount: retAmt,
+                amount: netAmt
+            }
+        });
+    } catch (err) {
+        console.error('Contract deductions error:', err);
+        res.status(500).json({ msg: 'Server Error', error: err.message });
     }
 });
 

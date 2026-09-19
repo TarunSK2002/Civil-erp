@@ -67,6 +67,15 @@ const AttendanceRecord = sequelize.define('AttendanceRecord', {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: true
     },
+    WorkDescription: {
+        type: DataTypes.STRING(255),
+        allowNull: true
+    },
+    DeductionSqFt: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+        defaultValue: 0
+    },
     Hours: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true

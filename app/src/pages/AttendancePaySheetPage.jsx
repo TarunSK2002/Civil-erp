@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Table2, Check, X, Loader2, Trash2, Calendar, FileSpreadsheet, Users, Building2, IndianRupee, Clock, CheckCircle2, PlusCircle, Settings, Coffee, ChevronDown, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown, Zap } from 'lucide-react';
 import api from '../api/axios';
 import { useSortableData } from '../hooks/useSortableData';
 import AttendanceEntryPanel from './AttendanceEntryPanel';
@@ -397,7 +397,29 @@ const AttendancePaySheetPage = () => {
           <table className="aps-grid">
             <thead><tr>
               <th onClick={() => requestSort('Name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Labour {getSortIcon('Name')}</th>
-              {sheetData.sites.map(site => <th key={site.id}><div className="aps-site-header"><span className="aps-site-name">{site.SiteName}</span></div></th>)}
+              {sheetData.sites.map(site => (
+                <th key={site.id}>
+                  <div className="aps-site-header">
+                    <span className="aps-site-name">{site.SiteName}</span>
+                    {site.ConstructionType === 'Contract' && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontSize: '9px',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: 'rgba(234, 179, 8, 0.2)',
+                        color: '#eab308',
+                        border: '1px solid rgba(234, 179, 8, 0.4)',
+                        fontWeight: '800'
+                      }}>
+                        <Zap size={9} /> CONTRACT
+                      </span>
+                    )}
+                  </div>
+                </th>
+              ))}
               <th onClick={() => requestSort('TotalAttendance')} style={{ cursor: 'pointer', userSelect: 'none' }}>TOTAL {getSortIcon('TotalAttendance')}</th>
             </tr></thead>
             <tbody>
@@ -440,33 +462,31 @@ const AttendancePaySheetPage = () => {
               </tr>
             </tbody>
           </table>
-
-
-
-
         </div>
       )}
 
       {/* New Sheet Modal */}
       {showNewSheetModal && (
         <div className="aps-modal-overlay" onClick={() => setShowNewSheetModal(false)}>
-          <div className="aps-modal" onClick={e => e.stopPropagation()} style={{ height: 'fit-content', margin: 'auto' }}>
-            <h2>Create Attendance Sheet</h2>
-            <div className="aps-modal-field"><label>Title</label>
-              <input ref={newSheetTitleRef} type="text" placeholder="e.g. Week 12.05.2026" value={newSheetForm.Title}
-                onChange={e => setNewSheetForm({ ...newSheetForm, Title: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleCreateSheet()} />
+          <div className="aps-modal" onClick={e => e.stopPropagation()}>
+            <h2>Create New Pay Sheet</h2>
+            <div className="aps-modal-field">
+              <label>Sheet Title</label>
+              <input type="text" placeholder="e.g. Week 1 - March 2026" value={newSheetForm.Title} onChange={e => setNewSheetForm({ ...newSheetForm, Title: e.target.value })} />
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div className="aps-modal-field" style={{ flex: 1 }}><label>Week Start</label>
+            <div className="aps-modal-row">
+              <div className="aps-modal-field">
+                <label>Week Start</label>
                 <input type="date" value={newSheetForm.WeekStartDate} onChange={e => setNewSheetForm({ ...newSheetForm, WeekStartDate: e.target.value })} />
               </div>
-              <div className="aps-modal-field" style={{ flex: 1 }}><label>Week End</label>
+              <div className="aps-modal-field">
+                <label>Week End</label>
                 <input type="date" value={newSheetForm.WeekEndDate} onChange={e => setNewSheetForm({ ...newSheetForm, WeekEndDate: e.target.value })} />
               </div>
             </div>
             <div className="aps-modal-actions">
               <button className="aps-btn aps-btn-secondary" onClick={() => setShowNewSheetModal(false)}>Cancel</button>
-              <button className="aps-btn aps-btn-primary" onClick={handleCreateSheet}>Create</button>
+              <button className="aps-btn aps-btn-primary" onClick={handleCreateSheet}>Create Sheet</button>
             </div>
           </div>
         </div>
@@ -484,11 +504,28 @@ const AttendancePaySheetPage = () => {
             <div className="aps-multi-select">
               {allPayees.filter(p => p.Name.toLowerCase().includes(payeeSearch.toLowerCase())).map(p => {
                 const isSel = selectedPayeeIds.includes(p.id);
+                // Check if this payee is contracted on any site in the current sheet
+                const isContractWorker = (sheetData?.sites || []).some(st => 
+                  st.ConstructionType === 'Contract' && 
+                  Array.isArray(st.ContractRates) && 
+                  st.ContractRates.some(cr => String(cr.payeeId) === String(p.id))
+                );
+
                 return (
                   <div key={p.id} className="aps-multi-select-item" onClick={() => setSelectedPayeeIds(prev => isSel ? prev.filter(id => id !== p.id) : [...prev, p.id])}>
                     <div className={`aps-checkbox ${isSel ? 'checked' : ''}`}>{isSel && <Check size={12} color="#0F0F1A" />}</div>
                     <div className={`aps-payee-badge ${p.Type}`} style={{ width: 24, height: 24, fontSize: 10 }}>{p.Name.charAt(0)}</div>
-                    <div><div style={{ fontSize: 13, fontWeight: 600 }}>{p.Name}</div><div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{p.Type}</div></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{p.Name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{p.Type}</div>
+                      </div>
+                      {isContractWorker && (
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.3)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <Zap size={10} /> Contract
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -517,7 +554,18 @@ const AttendancePaySheetPage = () => {
                   <div key={s.id} className="aps-multi-select-item" onClick={() => setSelectedSiteIds(prev => isSel ? prev.filter(id => id !== s.id) : [...prev, s.id])}>
                     <div className={`aps-checkbox ${isSel ? 'checked' : ''}`}>{isSel && <Check size={12} color="#0F0F1A" />}</div>
                     <Building2 size={16} color="var(--text-muted)" />
-                    <div><div style={{ fontSize: 13, fontWeight: 600 }}>{s.SiteName}</div></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{s.SiteName}</div>
+                      {s.ConstructionType === 'Contract' ? (
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.3)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <Zap size={10} /> Contract ({Array.isArray(s.ContractRates) ? s.ContractRates.length : 0})
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                          Normal
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}

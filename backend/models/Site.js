@@ -44,6 +44,14 @@ const Site = sequelize.define('Site', {
         type: DataTypes.STRING(255),
         defaultValue: ''
     },
+    ConstructionType: {
+        type: DataTypes.STRING(30),
+        defaultValue: 'Normal'
+    },
+    ContractRates: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]'
+    },
     CreatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

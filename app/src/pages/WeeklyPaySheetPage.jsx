@@ -3,7 +3,7 @@ import {
   Plus, Table2, ChevronDown, Check, X, Loader2, Trash2,
   Calendar, CreditCard, FileSpreadsheet, Users, Building2,
   IndianRupee, Clock, CheckCircle2, AlertCircle, Package, RotateCcw,
-  Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown
+  Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown, Ruler, Printer, FileText
 } from 'lucide-react';
 import api from '../api/axios';
 import { useSortableData } from '../hooks/useSortableData';
@@ -57,6 +57,15 @@ const WeeklyPaySheetPage = () => {
   const [purchaseDetailsOpen, setPurchaseDetailsOpen] = useState(true);
   const [savingPopupDiscounts, setSavingPopupDiscounts] = useState(false);
   const [toast, setToast] = useState(null); // { message, type }
+
+  // Contract / MB Breakdown State
+  const [contractDetailsOpen, setContractDetailsOpen] = useState(true);
+  const [contractBreakdown, setContractBreakdown] = useState(null);
+  const [loadingContract, setLoadingContract] = useState(false);
+  const [contractAdvInput, setContractAdvInput] = useState('');
+  const [contractRetInput, setContractRetInput] = useState('');
+  const [savingDeductions, setSavingDeductions] = useState(false);
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
 
   // New sheet form
   const [newSheetForm, setNewSheetForm] = useState({
@@ -129,10 +138,44 @@ const WeeklyPaySheetPage = () => {
     }
   }, [sheetData]);
 
-  // Sync popupDiscounts state when payment modal opens for a supplier cell
+  const fetchContractBreakdown = useCallback(async (pId, sId) => {
+    if (!selectedSheetId || !pId || !sId) return;
+    setLoadingContract(true);
+    try {
+      const res = await api.get(`/weekly-pay-sheets/${selectedSheetId}/contract-breakdown/${pId}/${sId}`);
+      setContractBreakdown(res.data);
+      setContractAdvInput(String(res.data.summary.advanceAmount || ''));
+      setContractRetInput(String(res.data.summary.retentionPercent || ''));
+    } catch (e) {
+      console.error('Failed to fetch contract breakdown', e);
+      setContractBreakdown(null);
+    } finally {
+      setLoadingContract(false);
+    }
+  }, [selectedSheetId]);
+
+  const handleSaveContractDeductions = async (payeeId, siteId) => {
+    setSavingDeductions(true);
+    try {
+      await api.put(`/weekly-pay-sheets/${selectedSheetId}/contract-deductions/${payeeId}/${siteId}`, {
+        advanceAmount: parseFloat(contractAdvInput) || 0,
+        retentionPercent: parseFloat(contractRetInput) || 0
+      });
+      showToast('Contract deductions & retention updated successfully', 'success');
+      await fetchSheetData(selectedSheetId);
+      await fetchContractBreakdown(payeeId, siteId);
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to update deductions');
+    } finally {
+      setSavingDeductions(false);
+    }
+  };
+
+  // Sync popupDiscounts or contractBreakdown state when payment modal opens
   useEffect(() => {
     if (showPayModal && showPayModal !== 'all') {
       const cellData = sheetData?.grid?.[showPayModal];
+      const isIncome = showPayModal.startsWith('income_');
       if (cellData && cellData.sourceType === 'Material') {
         const siteId = parseInt(showPayModal.split('_')[1]);
         const items = getCellPurchaseItems(cellData, siteId);
@@ -142,11 +185,23 @@ const WeeklyPaySheetPage = () => {
         });
         setPopupDiscounts(initDiscounts);
         setPurchaseDetailsOpen(true);
+      } else if (!isIncome) {
+        const parts = showPayModal.split('_');
+        const pId = parseInt(parts[0]);
+        const sId = parseInt(parts[1]);
+        const payee = sheetData?.payees?.find(p => p.id === pId);
+        if (cellData?.sourceType === 'Contract' || payee?.Type === 'Contractor') {
+          fetchContractBreakdown(pId, sId);
+          setContractDetailsOpen(true);
+        } else {
+          setContractBreakdown(null);
+        }
       }
     } else {
       setPopupDiscounts({});
+      setContractBreakdown(null);
     }
-  }, [showPayModal, sheetData, getCellPurchaseItems]);
+  }, [showPayModal, sheetData, getCellPurchaseItems, fetchContractBreakdown]);
 
   // Toast Helper
   const showToast = (message, type = 'success') => {
@@ -923,6 +978,9 @@ const WeeklyPaySheetPage = () => {
                                   </button>
                                 )}
                                 <span>{fmt(amt)}</span>
+                                {cellData?.sourceType === 'Contract' && (
+                                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: 'rgba(156, 39, 176, 0.18)', color: '#CE93D8', fontWeight: 800, marginLeft: 4 }}>MB</span>
+                                )}
                               </>
                             )}
                           </div>
@@ -1511,6 +1569,194 @@ const WeeklyPaySheetPage = () => {
                     </div>
                   )}
 
+                  {/* Contract & MB Details Section */}
+                  {(cellData?.sourceType === 'Contract' || payee?.Type === 'Contractor' || contractBreakdown) && (
+                    <div className="wps-popup-contract-details" style={{ marginBottom: 20 }}>
+                      <button
+                        type="button"
+                        className="wps-details-toggle"
+                        onClick={() => setContractDetailsOpen(!contractDetailsOpen)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          width: '100%',
+                          background: 'rgba(156, 39, 176, 0.08)',
+                          border: '1px solid rgba(156, 39, 176, 0.2)',
+                          borderRadius: 10,
+                          padding: '10px 14px',
+                          color: '#CE93D8',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          marginBottom: contractDetailsOpen ? 12 : 0,
+                          outline: 'none'
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Ruler size={14} /> 📐 Measurement Book (MB) & Retention ({contractBreakdown?.mbRecords?.length || 0} items)
+                        </span>
+                        <ChevronDown
+                          size={16}
+                          style={{ transform: contractDetailsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+                        />
+                      </button>
+
+                      {contractDetailsOpen && (
+                        <div style={{ border: '1px solid rgba(156, 39, 176, 0.25)', borderRadius: 10, padding: 12, background: 'rgba(25, 15, 35, 0.4)' }}>
+                          {loadingContract ? (
+                            <div style={{ padding: 16, textAlign: 'center', color: '#CE93D8' }}>
+                              <Loader2 size={16} className="wps-spinner" /> Loading Measurement Book...
+                            </div>
+                          ) : contractBreakdown ? (
+                            <>
+                              {contractBreakdown.mbRecords && contractBreakdown.mbRecords.length > 0 && (
+                                <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                                    <thead>
+                                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                                        <th style={{ textAlign: 'left', padding: '4px' }}>Date</th>
+                                        <th style={{ textAlign: 'left', padding: '4px' }}>Section / Room</th>
+                                        <th style={{ textAlign: 'center', padding: '4px' }}>Dimensions</th>
+                                        <th style={{ textAlign: 'right', padding: '4px' }}>Net SqFt</th>
+                                        <th style={{ textAlign: 'right', padding: '4px' }}>Rate</th>
+                                        <th style={{ textAlign: 'right', padding: '4px' }}>Value</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {contractBreakdown.mbRecords.map(r => (
+                                        <tr key={r.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.06)' }}>
+                                          <td style={{ padding: '6px 4px', whiteSpace: 'nowrap' }}>{r.date ? new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}</td>
+                                          <td style={{ padding: '6px 4px' }}>
+                                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.sectionName}</span>
+                                            {r.workDescription && <div style={{ fontSize: 10, color: '#BA68C8' }}>{r.workDescription}</div>}
+                                          </td>
+                                          <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                                            {r.length && r.breadth ? `${r.length}×${r.breadth}` : '—'}
+                                            {r.deductionSqFt > 0 ? ` (-${r.deductionSqFt})` : ''}
+                                          </td>
+                                          <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>{r.netSqFt || r.sqFt || '—'}</td>
+                                          <td style={{ padding: '6px 4px', textAlign: 'right' }}>₹{r.ratePerSqFt || '—'}</td>
+                                          <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: '#4CAF50' }}>₹{r.calculatedAmount.toLocaleString('en-IN')}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+
+                              {contractBreakdown.liftingRecords && contractBreakdown.liftingRecords.length > 0 && (
+                                <div style={{ fontSize: 11, marginBottom: 8, padding: '4px 8px', background: 'rgba(33, 150, 243, 0.08)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', color: '#64B5F6' }}>
+                                  <span>Vertical Lifting ({contractBreakdown.liftingRecords.length} items)</span>
+                                  <span style={{ fontWeight: 700 }}>+ ₹{contractBreakdown.summary.totalLiftingAmount.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+                              {contractBreakdown.miscs && contractBreakdown.miscs.length > 0 && (
+                                <div style={{ fontSize: 11, marginBottom: 8, padding: '4px 8px', background: 'rgba(0, 188, 212, 0.08)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', color: '#4DD0E1' }}>
+                                  <span>Site Miscs / Allowances ({contractBreakdown.miscs.length} items)</span>
+                                  <span style={{ fontWeight: 700 }}>+ ₹{contractBreakdown.summary.totalMiscAmount.toLocaleString('en-IN')}</span>
+                                </div>
+                              )}
+
+                              {/* Deductions Card */}
+                              <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginTop: 8 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                                  <span style={{ color: 'var(--text-muted)' }}>Gross Work Value:</span>
+                                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>₹{contractBreakdown.summary.grossTotal.toLocaleString('en-IN')}</span>
+                                </div>
+
+                                {!isPaid && (
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '8px 0', padding: '8px 0', borderTop: '1px dashed var(--border)', borderBottom: '1px dashed var(--border)' }}>
+                                    <div>
+                                      <label style={{ fontSize: 10, fontWeight: 700, color: '#FF9800', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                                        Mid-Week Advance (₹)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={contractAdvInput}
+                                        onChange={e => setContractAdvInput(e.target.value)}
+                                        style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 12 }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label style={{ fontSize: 10, fontWeight: 700, color: '#FF9800', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                                        Retention %
+                                      </label>
+                                      <input
+                                        type="number"
+                                        placeholder="5"
+                                        value={contractRetInput}
+                                        onChange={e => setContractRetInput(e.target.value)}
+                                        style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 12 }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#FF9800', marginBottom: 4 }}>
+                                  <span>Less: Mid-Week Advances:</span>
+                                  <span>- ₹{(parseFloat(contractAdvInput) || 0).toLocaleString('en-IN')}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#FF9800', marginBottom: 6 }}>
+                                  <span>Less: Retention ({contractRetInput || 0}%):</span>
+                                  <span>- ₹{((contractBreakdown.summary.grossTotal * (parseFloat(contractRetInput) || 0)) / 100).toLocaleString('en-IN')}</span>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, color: '#4CAF50', paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                                  <span>Net Payable:</span>
+                                  <span>
+                                    ₹{Math.max(0, contractBreakdown.summary.grossTotal - (parseFloat(contractAdvInput) || 0) - ((contractBreakdown.summary.grossTotal * (parseFloat(contractRetInput) || 0)) / 100)).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+
+                                {!isPaid && (
+                                  <button
+                                    type="button"
+                                    className="wps-btn wps-btn-secondary wps-btn-xs"
+                                    onClick={() => handleSaveContractDeductions(payeeId, siteId)}
+                                    disabled={savingDeductions}
+                                    style={{ marginTop: 10, width: '100%', padding: '6px', fontSize: 11, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, background: 'rgba(156, 39, 176, 0.15)', borderColor: 'rgba(156, 39, 176, 0.3)', color: '#CE93D8' }}
+                                  >
+                                    {savingDeductions ? <Loader2 size={12} className="wps-spinner" /> : <Check size={12} />}
+                                    Update Advance & Retention Deductions
+                                  </button>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowVoucherModal(true)}
+                                style={{
+                                  marginTop: 10,
+                                  width: '100%',
+                                  padding: '8px',
+                                  background: 'rgba(255,255,255,0.05)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 6,
+                                  color: 'var(--text-secondary)',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Printer size={13} /> View & Print Subcontractor MB Voucher
+                              </button>
+                            </>
+                          ) : (
+                            <div style={{ padding: 12, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                              No measurement records found for this week.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {isPaid ? (
                     <div style={{
                       background: 'rgba(76, 175, 80, 0.08)',
@@ -1707,6 +1953,211 @@ const WeeklyPaySheetPage = () => {
                 <button type="submit" className="wps-btn wps-btn-primary">Add Extra Payment</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Subcontractor Measurement & Payment Voucher Modal */}
+      {showVoucherModal && contractBreakdown && (
+        <div className="wps-modal-overlay" onClick={() => setShowVoucherModal(false)} style={{ zIndex: 1100 }}>
+          <div
+            className="wps-modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: 780,
+              width: '95%',
+              background: '#FFFFFF',
+              color: '#1E293B',
+              borderRadius: 12,
+              padding: 24,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
+            {/* Print & Close Header Bar (hidden in print) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid #E2E8F0', paddingBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Measurement Book (MB) Verification Voucher
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    background: '#0284C7',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Printer size={14} /> Print Voucher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowVoucherModal(false)}
+                  style={{
+                    background: '#F1F5F9',
+                    color: '#475569',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: 6,
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Voucher Body */}
+            <div id="printable-contractor-voucher">
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0 }}>JEEVA CONSTRUCTION</h1>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginTop: 4 }}>
+                  Subcontractor Measurement & Weekly Payment Voucher
+                </div>
+              </div>
+
+              {/* Meta Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', marginBottom: 16, fontSize: 12 }}>
+                <div>
+                  <div><span style={{ color: '#64748B' }}>Contractor / Payee:</span> <strong>{contractBreakdown.payee?.name}</strong></div>
+                  <div style={{ marginTop: 4 }}><span style={{ color: '#64748B' }}>Trade Type:</span> <strong>{contractBreakdown.payee?.type || 'Contractor'}</strong></div>
+                </div>
+                <div>
+                  <div><span style={{ color: '#64748B' }}>Project / Site:</span> <strong>{contractBreakdown.site?.name}</strong></div>
+                  <div style={{ marginTop: 4 }}><span style={{ color: '#64748B' }}>Week Ending:</span> <strong>{contractBreakdown.weekDate}</strong></div>
+                </div>
+              </div>
+
+              {/* MB Records Table */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>1. Measured Work Details (MB Records)</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ background: '#F1F5F9', borderBottom: '2px solid #CBD5E1' }}>
+                      <th style={{ padding: '6px', textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: '6px', textAlign: 'left' }}>Floor / Section</th>
+                      <th style={{ padding: '6px', textAlign: 'left' }}>Room / Work Description</th>
+                      <th style={{ padding: '6px', textAlign: 'center' }}>L × B (ft)</th>
+                      <th style={{ padding: '6px', textAlign: 'right' }}>Ded (SqFt)</th>
+                      <th style={{ padding: '6px', textAlign: 'right' }}>Net SqFt</th>
+                      <th style={{ padding: '6px', textAlign: 'right' }}>Rate (₹)</th>
+                      <th style={{ padding: '6px', textAlign: 'right' }}>Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contractBreakdown.mbRecords?.map((r) => (
+                      <tr key={r.id} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                        <td style={{ padding: '6px' }}>{r.date ? new Date(r.date).toLocaleDateString('en-IN') : '—'}</td>
+                        <td style={{ padding: '6px', fontWeight: 600 }}>{r.sectionName}</td>
+                        <td style={{ padding: '6px' }}>{r.workDescription || '—'}</td>
+                        <td style={{ padding: '6px', textAlign: 'center' }}>{r.length && r.breadth ? `${r.length} × ${r.breadth}` : '—'}</td>
+                        <td style={{ padding: '6px', textAlign: 'right', color: r.deductionSqFt > 0 ? '#DC2626' : '#64748B' }}>
+                          {r.deductionSqFt > 0 ? `-${r.deductionSqFt}` : '0'}
+                        </td>
+                        <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700 }}>{r.netSqFt || r.sqFt || '—'}</td>
+                        <td style={{ padding: '6px', textAlign: 'right' }}>₹{r.ratePerSqFt || '—'}</td>
+                        <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700 }}>₹{r.calculatedAmount?.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                    {(!contractBreakdown.mbRecords || contractBreakdown.mbRecords.length === 0) && (
+                      <tr><td colSpan={8} style={{ padding: 10, textAlign: 'center', color: '#94A3B8' }}>No MB records for this week</td></tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#F8FAFC', fontWeight: 700, borderTop: '2px solid #CBD5E1' }}>
+                      <td colSpan={5} style={{ padding: '6px', textAlign: 'right' }}>Total Measured Work:</td>
+                      <td style={{ padding: '6px', textAlign: 'right' }}>
+                        {contractBreakdown.mbRecords?.reduce((s, r) => s + (parseFloat(r.netSqFt || r.sqFt || 0)), 0).toFixed(2)} SqFt
+                      </td>
+                      <td></td>
+                      <td style={{ padding: '6px', textAlign: 'right' }}>
+                        ₹{contractBreakdown.summary?.totalWorkAmount?.toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Lifting & Miscs if any */}
+              {(contractBreakdown.liftingRecords?.length > 0 || contractBreakdown.miscs?.length > 0) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, fontSize: 11 }}>
+                  {contractBreakdown.liftingRecords?.length > 0 && (
+                    <div style={{ border: '1px solid #E2E8F0', borderRadius: 6, padding: 8 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4 }}>Material Lifting:</div>
+                      {contractBreakdown.liftingRecords.map(l => (
+                        <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                          <span>{l.materialType} ({l.floor}): {l.quantity} @ ₹{l.rate}</span>
+                          <strong>₹{l.amount.toLocaleString('en-IN')}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {contractBreakdown.miscs?.length > 0 && (
+                    <div style={{ border: '1px solid #E2E8F0', borderRadius: 6, padding: 8 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4 }}>Site Allowances:</div>
+                      {contractBreakdown.miscs.map(m => (
+                        <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                          <span>{m.name}</span>
+                          <strong>₹{m.amount.toLocaleString('en-IN')}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Financial Deductions Summary Box */}
+              <div style={{ border: '2px solid #CBD5E1', borderRadius: 8, padding: 12, marginBottom: 24, fontSize: 12, background: '#F8FAFC' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span>Gross Measured Work + Additions:</span>
+                  <strong>₹{contractBreakdown.summary?.grossTotal?.toLocaleString('en-IN')}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#DC2626' }}>
+                  <span>Less: Mid-Week Running Advances (Bata / Cash):</span>
+                  <strong>- ₹{(parseFloat(contractBreakdown.summary?.advanceAmount) || 0).toLocaleString('en-IN')}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', color: '#DC2626' }}>
+                  <span>Less: Retention Money ({contractBreakdown.summary?.retentionPercent || 0}%):</span>
+                  <strong>- ₹{(parseFloat(contractBreakdown.summary?.retentionAmount) || 0).toLocaleString('en-IN')}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 0 0', marginTop: 6, borderTop: '2px solid #CBD5E1', fontSize: 14, fontWeight: 800, color: '#15803D' }}>
+                  <span>NET PAYABLE THIS WEEK:</span>
+                  <span>₹{contractBreakdown.summary?.netPayable?.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {/* Signatures */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, textAlign: 'center', marginTop: 36, paddingTop: 12, fontSize: 11, color: '#475569' }}>
+                <div>
+                  <div style={{ borderTop: '1px solid #94A3B8', paddingTop: 6, fontWeight: 700 }}>Prepared By</div>
+                  <div style={{ fontSize: 10 }}>Site Supervisor</div>
+                </div>
+                <div>
+                  <div style={{ borderTop: '1px solid #94A3B8', paddingTop: 6, fontWeight: 700 }}>Checked By</div>
+                  <div style={{ fontSize: 10 }}>Site Engineer</div>
+                </div>
+                <div>
+                  <div style={{ borderTop: '1px solid #94A3B8', paddingTop: 6, fontWeight: 700 }}>Contractor</div>
+                  <div style={{ fontSize: 10 }}>Receiver Signature</div>
+                </div>
+                <div>
+                  <div style={{ borderTop: '1px solid #94A3B8', paddingTop: 6, fontWeight: 700 }}>Approved By</div>
+                  <div style={{ fontSize: 10 }}>Management</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -25,6 +25,26 @@ const WeeklyPaySheetItem = sequelize.define('WeeklyPaySheetItem', {
         allowNull: false,
         defaultValue: 0
     },
+    GrossAmount: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0
+    },
+    AdvanceAmount: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0
+    },
+    RetentionPercent: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+        defaultValue: 0
+    },
+    RetentionAmount: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0
+    },
     PaymentStatus: {
         type: DataTypes.STRING(20),
         defaultValue: 'Pending'

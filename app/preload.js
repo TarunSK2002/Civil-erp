@@ -1,7 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const pkg = require('./package.json');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    appVersion: pkg.version,
-    getAppVersion: () => pkg.version,
+    appVersion: '3.2.4',
+    getAppVersion: () => ipcRenderer.invoke('get-app-version')
 });

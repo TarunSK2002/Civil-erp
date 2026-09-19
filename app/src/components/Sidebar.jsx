@@ -17,6 +17,7 @@ import {
   Table2,
   UserCheck,
   ClipboardCheck,
+  CalendarCheck,
   Settings2,
   Wallet
 } from 'lucide-react';
@@ -135,6 +136,7 @@ const Sidebar = ({ expanded }) => {
         {user?.role?.toUpperCase() === 'ADMIN' && (
           <SidebarItem to="/personal-expenses" icon={Wallet} label="Petty Cash" expanded={expanded} />
         )}
+        <SidebarItem to="/daily-attendance" icon={CalendarCheck} label="Daily Attendance" expanded={expanded} />
         <SidebarItem to="/attendance-pay-sheet" icon={ClipboardCheck} label="Attendance Sheet" expanded={expanded} />
         <SidebarItem to="/shift-master" icon={Settings2} label="Shift Master" expanded={expanded} />
         <SidebarItem to="/person-type-master" icon={Users} label="Person Types" expanded={expanded} />

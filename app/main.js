@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, session } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
@@ -70,6 +70,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: false,
+            webSecurity: false,
             preload: path.join(__dirname, 'preload.js')
         },
         backgroundColor: '#1A1A2E',
@@ -192,6 +193,16 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    if (session.defaultSession) {
+        session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+            const headers = { ...details.responseHeaders };
+            headers['Access-Control-Allow-Origin'] = ['*'];
+            headers['Access-Control-Allow-Credentials'] = ['true'];
+            headers['Cross-Origin-Resource-Policy'] = ['cross-origin'];
+            headers['Cross-Origin-Opener-Policy'] = ['unsafe-none'];
+            callback({ responseHeaders: headers });
+        });
+    }
     startBackend();
     createWindow();
 });
